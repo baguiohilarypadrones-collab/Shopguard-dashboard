@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+
+  "name": "ShopGuard Protection",
+
+  "version": "1.0.0",
+
+  "description": "Detect dark patterns, suspicious sellers, and price signals while shopping online.",
+
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+
+  "host_permissions": [
+    "http://localhost:5000/*",
+    "https://*.shopee.ph/*",
+    "https://*.lazada.com.ph/*",
+    "https://*.lazada.com/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "action": {
+    "default_title": "ShopGuard",
+    "default_popup": "popup.html"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.shopee.ph/*",
+        "https://*.lazada.com.ph/*",
+        "https://*.lazada.com/*"
+      ],
+
+      "js": [
+        "content.js"
+      ],
+
+      "css": [
+        "content.css"
+      ],
+
+      "run_at": "document_idle"
+    }
+  ]
+}

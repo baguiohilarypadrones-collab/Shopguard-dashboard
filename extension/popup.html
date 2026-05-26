@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>ShopGuard Scanner</title>
+
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+
+  <body>
+    <main class="popup">
+      <header class="popup__header">
+        <div class="popup__mark">SG</div>
+
+        <div>
+          <h1>ShopGuard Scanner</h1>
+
+          <p>
+            Lazada and Shopee product scanner
+          </p>
+        </div>
+      </header>
+
+      <section
+        class="popup__status"
+        id="statusBox"
+      >
+        Ready to scan this page.
+      </section>
+
+      <section class="popup__actions">
+        <button
+          id="scanPage"
+          class="button button--primary"
+          type="button"
+        >
+          Scan page
+        </button>
+
+        <button
+          id="addItem"
+          class="button"
+          type="button"
+          disabled
+        >
+          Add to web app
+        </button>
+
+        <button
+          id="deleteItem"
+          class="button button--danger"
+          type="button"
+          disabled
+        >
+          Delete scan
+        </button>
+
+        <button
+          id="openDashboard"
+          class="button"
+          type="button"
+        >
+          Open dashboard
+        </button>
+      </section>
+
+      <section
+        id="resultBox"
+        class="result result--empty"
+      >
+        <p>
+          No scan yet. Open a Lazada or
+          Shopee product page and click
+          Scan page.
+        </p>
+      </section>
+
+      <template id="scanTemplate">
+        <div class="scan-card">
+          <img
+            id="scanImage"
+            class="scan-card__image"
+            src=""
+            alt="Product image"
+          />
+
+          <div class="scan-card__content">
+            <h2
+              id="scanName"
+              class="scan-card__title"
+            >
+              Product name
+            </h2>
+
+            <div class="scan-card__grid">
+              <div class="scan-card__label">
+                Price
+              </div>
+
+              <div
+                id="scanPrice"
+                class="scan-card__value"
+              >
+                ₱0.00
+              </div>
+
+              <div class="scan-card__label">
+                Rating
+              </div>
+
+              <div
+                id="scanRating"
+                class="scan-card__value"
+              >
+                0
+              </div>
+
+              <div class="scan-card__label">
+                Reviews
+              </div>
+
+              <div
+                id="scanReviews"
+                class="scan-card__value"
+              >
+                0
+              </div>
+
+              <div class="scan-card__label">
+                Platform
+              </div>
+
+              <div
+                id="scanPlatform"
+                class="scan-card__value"
+              >
+                Unknown
+              </div>
+
+              <div class="scan-card__label">
+                Seller
+              </div>
+
+              <div
+                id="scanSeller"
+                class="scan-card__value"
+              >
+                Unknown seller
+              </div>
+
+              <div class="scan-card__label">
+                Seller Rating
+              </div>
+
+              <div
+                id="scanSellerRating"
+                class="scan-card__value"
+              >
+                0
+              </div>
+
+              <div class="scan-card__label">
+                Products
+              </div>
+
+              <div
+                id="scanProducts"
+                class="scan-card__value"
+              >
+                0
+              </div>
+
+              <div class="scan-card__label">
+                Seller ID
+              </div>
+
+              <div
+                id="scanSellerId"
+                class="scan-card__value"
+              >
+                unknown
+              </div>
+            </div>
+
+            <div
+              id="warningBox"
+              class="warning-list"
+            ></div>
+          </div>
+        </div>
+      </template>
+
+      <details class="settings">
+        <summary>
+          Extension settings
+        </summary>
+
+        <label class="toggle-row">
+          <span>
+            Extension enabled
+          </span>
+
+          <input
+            id="enabled"
+            type="checkbox"
+          />
+        </label>
+
+        <label class="toggle-row">
+          <span>
+            Dark pattern detection
+          </span>
+
+          <input
+            id="darkPatternDetection"
+            type="checkbox"
+          />
+        </label>
+
+        <label class="toggle-row">
+          <span>
+            Seller warnings
+          </span>
+
+          <input
+            id="sellerWarnings"
+            type="checkbox"
+          />
+        </label>
+
+        <label class="toggle-row">
+          <span>
+            Price scanner
+          </span>
+
+          <input
+            id="priceScanner"
+            type="checkbox"
+          />
+        </label>
+      </details>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

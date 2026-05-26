@@ -1,0 +1,165 @@
+* { box-sizing: border-box; }
+
+body {
+  width: 380px;
+  margin: 0;
+  background: #0f172a;
+  color: #f8fafc;
+  font-family: Inter, Arial, sans-serif;
+}
+
+.popup { padding: 16px; }
+
+.popup__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.popup__mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: #06b6d4;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+h1 { margin: 0; font-size: 18px; }
+p { margin: 0; }
+
+.popup__header p,
+.muted {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.popup__status,
+.result,
+.settings {
+  margin-bottom: 14px;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  padding: 12px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.popup__status--warning {
+  border-color: rgba(239, 68, 68, 0.65);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+}
+
+.popup__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.button {
+  border: 1px solid #334155;
+  border-radius: 10px;
+  background: transparent;
+  color: #f8fafc;
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.button--primary {
+  border-color: #06b6d4;
+  background: #06b6d4;
+}
+
+.button--danger {
+  border-color: rgba(239, 68, 68, 0.75);
+  color: #fca5a5;
+}
+
+.result--empty {
+  color: #94a3b8;
+}
+
+.product-card {
+  display: grid;
+  gap: 10px;
+}
+
+.product-card img {
+  width: 100%;
+  height: 145px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #0f172a;
+}
+
+.data-grid {
+  display: grid;
+  gap: 7px;
+}
+
+.data-row {
+  display: grid;
+  grid-template-columns: 94px 1fr;
+  gap: 8px;
+}
+
+.data-label {
+  color: #94a3b8;
+}
+
+.warning-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.warning {
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.7);
+  padding: 8px;
+}
+
+.warning--critical {
+  border-left-color: #ef4444;
+  color: #fecaca;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+  padding: 8px 0;
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+.toggle-row:last-child {
+  border-bottom: 0;
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #06b6d4;
+}
