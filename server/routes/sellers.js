@@ -106,7 +106,7 @@ router.put('/:id/flag', async (req, res) => {
   try {
     const seller = await Seller.findByIdAndUpdate(
       req.params.id,
-      { $set: { status: 'flagged' }, $inc: { reports: 1 } },
+      { status: 'flagged', $inc: { reports: 1 } },
       { new: true }
     );
     if (!seller) return res.status(404).json({ error: 'Seller not found' });
