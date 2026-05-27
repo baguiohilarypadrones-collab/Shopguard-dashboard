@@ -1,24 +1,23 @@
 {
   "manifest_version": 3,
 
-  "name": "ShopGuard Protection",
+  "name": "ShopGuard Scanner",
 
   "version": "1.0.0",
 
-  "description": "Detect dark patterns, suspicious sellers, and price signals while shopping online.",
+  "description": "ShopGuard browser extension for scanning Shopee and Lazada products.",
 
   "permissions": [
-    "storage",
     "activeTab",
+    "storage",
     "scripting",
     "tabs"
   ],
 
   "host_permissions": [
-    "http://localhost:5000/*",
     "https://*.shopee.ph/*",
     "https://*.lazada.com.ph/*",
-    "https://*.lazada.com/*"
+    "http://localhost:5000/*"
   ],
 
   "background": {
@@ -26,16 +25,15 @@
   },
 
   "action": {
-    "default_title": "ShopGuard",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "ShopGuard"
   },
 
   "content_scripts": [
     {
       "matches": [
         "https://*.shopee.ph/*",
-        "https://*.lazada.com.ph/*",
-        "https://*.lazada.com/*"
+        "https://*.lazada.com.ph/*"
       ],
 
       "js": [

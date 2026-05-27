@@ -1,252 +1,203 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
 
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
+<head>
 
-    <title>ShopGuard Scanner</title>
+  <meta charset="UTF-8" />
 
-    <link rel="stylesheet" href="popup.css" />
-  </head>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
 
-  <body>
-    <main class="popup">
-      <header class="popup__header">
-        <div class="popup__mark">SG</div>
+  <title>ShopGuard</title>
 
-        <div>
-          <h1>ShopGuard Scanner</h1>
+  <style>
 
-          <p>
-            Lazada and Shopee product scanner
-          </p>
-        </div>
-      </header>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-      <section
-        class="popup__status"
-        id="statusBox"
-      >
-        Ready to scan this page.
-      </section>
+    body {
 
-      <section class="popup__actions">
-        <button
-          id="scanPage"
-          class="button button--primary"
-          type="button"
-        >
-          Scan page
-        </button>
+      width: 360px;
 
-        <button
-          id="addItem"
-          class="button"
-          type="button"
-          disabled
-        >
-          Add to web app
-        </button>
+      min-height: 500px;
 
-        <button
-          id="deleteItem"
-          class="button button--danger"
-          type="button"
-          disabled
-        >
-          Delete scan
-        </button>
+      background: #0f172a;
 
-        <button
-          id="openDashboard"
-          class="button"
-          type="button"
-        >
-          Open dashboard
-        </button>
-      </section>
+      color: white;
 
-      <section
-        id="resultBox"
-        class="result result--empty"
-      >
-        <p>
-          No scan yet. Open a Lazada or
-          Shopee product page and click
-          Scan page.
-        </p>
-      </section>
+      font-family: Arial, sans-serif;
 
-      <template id="scanTemplate">
-        <div class="scan-card">
-          <img
-            id="scanImage"
-            class="scan-card__image"
-            src=""
-            alt="Product image"
-          />
+      padding: 16px;
+    }
 
-          <div class="scan-card__content">
-            <h2
-              id="scanName"
-              class="scan-card__title"
-            >
-              Product name
-            </h2>
+    .header {
 
-            <div class="scan-card__grid">
-              <div class="scan-card__label">
-                Price
-              </div>
+      text-align: center;
 
-              <div
-                id="scanPrice"
-                class="scan-card__value"
-              >
-                ₱0.00
-              </div>
+      margin-bottom: 20px;
+    }
 
-              <div class="scan-card__label">
-                Rating
-              </div>
+    .logo {
 
-              <div
-                id="scanRating"
-                class="scan-card__value"
-              >
-                0
-              </div>
+      font-size: 28px;
 
-              <div class="scan-card__label">
-                Reviews
-              </div>
+      font-weight: bold;
 
-              <div
-                id="scanReviews"
-                class="scan-card__value"
-              >
-                0
-              </div>
+      color: #06b6d4;
 
-              <div class="scan-card__label">
-                Platform
-              </div>
+      margin-bottom: 6px;
+    }
 
-              <div
-                id="scanPlatform"
-                class="scan-card__value"
-              >
-                Unknown
-              </div>
+    .subtitle {
 
-              <div class="scan-card__label">
-                Seller
-              </div>
+      color: #94a3b8;
 
-              <div
-                id="scanSeller"
-                class="scan-card__value"
-              >
-                Unknown seller
-              </div>
+      font-size: 14px;
+    }
 
-              <div class="scan-card__label">
-                Seller Rating
-              </div>
+    .scan-btn {
 
-              <div
-                id="scanSellerRating"
-                class="scan-card__value"
-              >
-                0
-              </div>
+      width: 100%;
 
-              <div class="scan-card__label">
-                Products
-              </div>
+      padding: 14px;
 
-              <div
-                id="scanProducts"
-                class="scan-card__value"
-              >
-                0
-              </div>
+      border: none;
 
-              <div class="scan-card__label">
-                Seller ID
-              </div>
+      border-radius: 12px;
 
-              <div
-                id="scanSellerId"
-                class="scan-card__value"
-              >
-                unknown
-              </div>
-            </div>
+      background: #06b6d4;
 
-            <div
-              id="warningBox"
-              class="warning-list"
-            ></div>
-          </div>
-        </div>
-      </template>
+      color: white;
 
-      <details class="settings">
-        <summary>
-          Extension settings
-        </summary>
+      font-size: 16px;
 
-        <label class="toggle-row">
-          <span>
-            Extension enabled
-          </span>
+      font-weight: bold;
 
-          <input
-            id="enabled"
-            type="checkbox"
-          />
-        </label>
+      cursor: pointer;
 
-        <label class="toggle-row">
-          <span>
-            Dark pattern detection
-          </span>
+      transition: 0.2s;
+    }
 
-          <input
-            id="darkPatternDetection"
-            type="checkbox"
-          />
-        </label>
+    .scan-btn:hover {
 
-        <label class="toggle-row">
-          <span>
-            Seller warnings
-          </span>
+      background: #0891b2;
+    }
 
-          <input
-            id="sellerWarnings"
-            type="checkbox"
-          />
-        </label>
+    .status {
 
-        <label class="toggle-row">
-          <span>
-            Price scanner
-          </span>
+      margin-top: 14px;
 
-          <input
-            id="priceScanner"
-            type="checkbox"
-          />
-        </label>
-      </details>
-    </main>
+      text-align: center;
 
-    <script src="popup.js"></script>
-  </body>
+      font-size: 14px;
+
+      font-weight: bold;
+    }
+
+    .result {
+
+      margin-top: 16px;
+    }
+
+    .footer {
+
+      margin-top: 20px;
+
+      padding-top: 12px;
+
+      border-top: 1px solid #334155;
+
+      text-align: center;
+
+      color: #64748b;
+
+      font-size: 12px;
+    }
+
+    .warning-box {
+
+      margin-top: 14px;
+
+      padding: 10px;
+
+      border-radius: 10px;
+
+      background: rgba(239, 68, 68, 0.15);
+
+      border: 1px solid rgba(239, 68, 68, 0.3);
+
+      color: #fca5a5;
+
+      font-size: 13px;
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+
+    <div class="logo">
+      SHOPGUARD
+    </div>
+
+    <div class="subtitle">
+      Scam & Dark Pattern Detector
+    </div>
+
+  </div>
+
+  <!-- SCAN BUTTON -->
+  <button
+    id="scanBtn"
+    class="scan-btn"
+  >
+    Scan Current Product
+  </button>
+
+  <!-- STATUS -->
+  <div
+    id="status"
+    class="status"
+  >
+    Ready to scan
+  </div>
+
+  <!-- RESULT -->
+  <div
+    id="result"
+    class="result"
+  ></div>
+
+  <!-- WARNING -->
+  <div class="warning-box">
+
+    Supported Platforms:
+    <br />
+    • Shopee
+    <br />
+    • Lazada
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+
+    ShopGuard Extension v1.0
+
+  </div>
+
+  <!-- SCRIPT -->
+  <script src="popup.js"></script>
+
+</body>
+
 </html>

@@ -1,542 +1,862 @@
-(() => {
-  if (window.__SHOPGUARD_CONTENT_READY__) return;
-  window.__SHOPGUARD_CONTENT_READY__ = true;
+// ================================
+// SHOPGUARD CONTENT SCRIPT
+// content.js
+// ================================
 
-  const SHOPGUARD_BANNER_ID = "shopguard-protection-banner";
+console.log("ShopGuard content script loaded");
 
-  const DARK_PATTERN_RULES = [
-    {
-      label: "Fake urgency language",
-      severity: "high",
-      pattern: /limited time|hurry|ending soon|last chance|deal expires|today only/i,
-    },
-    {
-      label: "False scarcity wording",
-      severity: "medium",
-      pattern: /only\s+\d+\s+(left|remaining)|almost sold out|selling fast/i,
-    },
-    {
-      label: "Pressure purchase wording",
-      severity: "medium",
-      pattern: /\d+\s+people\s+(are\s+)?viewing|\d+\s+sold\s+in\s+the\s+last/i,
-    },
-    {
-      label: "Hidden-fee clue",
-      severity: "high",
-      pattern: /handling fee|processing fee|service charge|extra fee/i,
-    },
-    {
-      label: "Manipulative opt-out language",
-      severity: "low",
-      pattern: /no thanks.*save money|i do not want.*discount|miss out/i,
-    },
+// ================================
+// DETECT PLATFORM
+// ================================
+
+function getPlatform() {
+
+  if (location.hostname.includes("shopee")) {
+    return "Shopee";
+  }
+
+  if (location.hostname.includes("lazada")) {
+    return "Lazada";
+  }
+
+  return "Unknown";
+}
+
+// ================================
+// CLEAN PRICE
+// ================================
+
+function cleanPrice(priceText) {
+
+  if (!priceText) return 0;
+
+  const cleaned =
+    priceText
+      .replace(/[₱,\s]/g, "")
+      .replace(/[^\d.]/g, "");
+
+  const value =
+    parseFloat(cleaned);
+
+  return isNaN(value)
+    ? 0
+    : value;
+}
+
+// ================================
+// CLEAN RATING
+// ================================
+
+function cleanRating(ratingText) {
+
+  if (!ratingText) return 0;
+
+  const value =
+    parseFloat(
+      ratingText.replace(/[^\d.]/g, "")
+    );
+
+  return isNaN(value)
+    ? 0
+    : value;
+}
+
+// ================================
+// GET SHOPEE PRODUCT
+// ================================
+
+function getShopeeProduct() {
+
+  // Wait-safe helper
+  const getText = (selectors) => {
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el && el.innerText.trim()) {
+        return el.innerText.trim();
+      }
+    }
+    return "";
+  };
+
+  // ================================
+  // NAME
+  // ================================
+  const name = getText([
+    "h1",
+    '[data-testid="pdp-product-title"]',
+    ".VCNVHn",
+    ".qaNIZv"
+  ]);
+
+  // ================================
+  // PRICE (avoid shipping price)
+  // ================================
+  let price = 0;
+
+  const priceContainer = document.querySelectorAll("span");
+
+  priceContainer.forEach(el => {
+    const text = el.innerText.trim();
+
+    if (
+      text.startsWith("₱") &&
+      text.length < 20 &&                // avoid long promo strings
+      !text.toLowerCase().includes("off") &&
+      !text.toLowerCase().includes("shipping")
+    ) {
+      const value = parseFloat(text.replace(/[₱,]/g, ""));
+      if (value > price) {               // pick highest realistic price
+        price = value;
+      }
+    }
+  });
+
+  // ================================
+  // SELLER (real seller only)
+  // ================================
+  let seller = "";
+
+  const sellerLinks = document.querySelectorAll("a[href*='shop']");
+
+  sellerLinks.forEach(link => {
+    const text = link.innerText.trim();
+    if (
+      text &&
+      text.length > 2 &&
+      !text.toLowerCase().includes("seller centre") &&
+      !text.toLowerCase().includes("chat now") &&
+      !text.toLowerCase().includes("visit")
+    ) {
+      seller = text;
+    }
+  });
+
+  // ================================
+  // RATING
+  // ================================
+  let rating = 0;
+
+  const ratingMatch = document.body.innerText.match(/\b([1-5]\.\d)\b/);
+  if (ratingMatch) {
+    const val = parseFloat(ratingMatch[1]);
+    if (val >= 1 && val <= 5) {
+      rating = val;
+    }
+  }
+
+  // ================================
+  // REVIEWS
+  // ================================
+  let reviews = 0;
+
+  const reviewMatch = document.body.innerText.match(/([\d,]+)\s*Ratings/i);
+  if (reviewMatch) {
+    reviews = parseInt(reviewMatch[1].replace(/,/g, "")) || 0;
+  }
+
+  // ================================
+  // IMAGE (Shopee lazy loads via data-src)
+  // ================================
+  let image = "";
+
+  const images = document.querySelectorAll("img");
+
+  images.forEach(img => {
+    const src =
+      img.getAttribute("src") ||
+      img.getAttribute("data-src") ||
+      img.getAttribute("data-lazy-src");
+
+    if (
+      src &&
+      src.startsWith("http") &&
+      !src.includes("avatar") &&
+      !src.includes("icon")
+    ) {
+      image = src;
+    }
+  });
+
+  // ================================
+  // AUTO BOGUS DETECTION
+  // ================================
+  let status = "verified";
+
+  if (rating > 0 && rating < 2.5) status = "bogus";
+  if (reviews > 0 && reviews < 5) status = "bogus";
+
+  return {
+    name,
+    price: price || 0,
+    originalPrice: price || 0,
+    image,
+    category: "Unknown",
+    platform: "Shopee",
+    rating,
+    reviews,
+    status,
+    inStock: true,
+    url: location.href,
+    sellerName: seller || "Unknown Seller",
+    sellerId: (seller || "unknown")
+      .toLowerCase()
+      .replace(/\s/g, "_")
+  };
+}
+
+
+// ================================
+// GET LAZADA PRODUCT
+// ================================
+
+function getLazadaProduct() {
+
+  // NAME
+  const name =
+    document.querySelector("h1")?.textContent?.trim() ||
+
+    "";
+
+  // ================================
+  // PRICE
+  // ================================
+
+  let price = "";
+
+  const priceSelectors = [
+
+    ".pdp-price",
+
+    ".notranslate",
+
+    '[class*="price"]',
+
+    '[class*="Price"]'
   ];
 
-  function text(selector) {
-    const node = document.querySelector(selector);
+  for (const selector of priceSelectors) {
 
-    return (
-      node?.textContent
-        ?.replace(/\s+/g, " ")
-        .trim() || ""
-    );
+    const elements =
+      document.querySelectorAll(selector);
+
+    for (const el of elements) {
+
+      const text =
+        el.textContent?.trim() || "";
+
+      const match =
+        text.match(/₱\s?(\d+[.,]?\d*)/);
+
+      if (match) {
+
+        const value =
+          parseFloat(
+            match[1]
+              .replace(/,/g, "")
+          );
+
+        // IGNORE HUGE PRICES
+        if (
+          value > 0 &&
+          value < 5000
+        ) {
+
+          price =
+            `₱${value.toFixed(2)}`;
+
+          break;
+        }
+      }
+    }
+
+    if (price) break;
   }
 
-  function attr(selector, attribute) {
-    const node = document.querySelector(selector);
+  // ================================
+  // RATING
+  // ================================
 
-    return node?.getAttribute(attribute) || "";
-  }
+  let rating = "";
 
-  function firstUsefulText(selectors) {
-    for (const selector of selectors) {
-      const value = text(selector);
+  const allElements =
+    document.querySelectorAll("span, div");
+
+  allElements.forEach(el => {
+
+    const text =
+      el.textContent?.trim() || "";
+
+    if (
+      /^\d\.\d$/.test(text)
+    ) {
+
+      const num =
+        parseFloat(text);
 
       if (
-        value &&
-        value.length >= 2 &&
-        value.length <= 240
+        num >= 1 &&
+        num <= 5
       ) {
-        return value;
+
+        if (!rating) {
+          rating = text;
+        }
       }
     }
+  });
 
-    return "";
-  }
+  // ================================
+  // SELLER
+  // ================================
 
-  function firstImage(selectors) {
-    for (const selector of selectors) {
-      const value =
-        attr(selector, "src") ||
-        attr(selector, "data-src") ||
-        attr(selector, "data-img");
+  let seller = "";
 
-      if (value && !value.startsWith("data:")) {
-        return value.startsWith("//")
-          ? `https:${value}`
-          : value;
-      }
+  const sellerElements =
+    document.querySelectorAll("a, span, div");
+
+  sellerElements.forEach(el => {
+
+    const text =
+      el.textContent?.trim() || "";
+
+    const blocked = [
+
+      "GO TO STORE",
+
+      "SELL ON LAZADA",
+
+      "MEN'S SPORTS CLOTHING",
+
+      "CHAT NOW",
+
+      "FOLLOW"
+    ];
+
+    if (
+      blocked.includes(
+        text.toUpperCase()
+      )
+    ) {
+      return;
     }
 
-    const ogImage = attr(
-      'meta[property="og:image"]',
-      "content"
+    if (
+      text.length > 2 &&
+      text.length < 25
+    ) {
+
+      const parent =
+        el.parentElement?.innerText || "";
+
+      if (
+        parent.includes("Seller") ||
+
+        parent.includes("sold by") ||
+
+        parent.includes("Visit Store")
+      ) {
+
+        if (!seller) {
+          seller = text;
+        }
+      }
+    }
+  });
+
+  // IMAGE
+  const image =
+    document.querySelector(
+      ".gallery-preview-panel__image img"
+    )?.src ||
+
+    document.querySelector("img")?.src ||
+
+    "";
+
+  // REVIEWS
+  let reviews = 0;
+
+  const reviewMatch =
+    document.body.innerText.match(
+      /(\d+[,\d]*)\s*Ratings/i
     );
 
-    if (ogImage) return ogImage;
+  if (reviewMatch) {
 
-    return "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400&h=300&fit=crop";
+    reviews =
+      parseInt(
+        reviewMatch[1]
+          .replace(/,/g, "")
+      ) || 0;
   }
 
-  function numberFromText(value) {
-    if (!value) return 0;
+  // RETURN
+  return {
 
-    const match = String(value).match(
-      /[0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+/
+    name,
+
+    price: Number(
+      cleanPrice(price).toFixed(2)
+    ),
+
+    originalPrice: Number(
+      cleanPrice(price).toFixed(2)
+    ),
+
+    image,
+
+    category: "Unknown",
+
+    platform: "Lazada",
+
+    rating: cleanRating(rating),
+
+    reviews,
+
+    status: "verified",
+
+    inStock: true,
+
+    url: location.href,
+
+    sellerName:
+      seller || "Unknown Seller",
+
+    sellerId:
+      (seller || "unknown")
+        .toLowerCase()
+        .replace(/\s/g, "_")
+  };
+}
+
+// ================================
+// MAIN SCANNER
+// ================================
+
+function scanProduct() {
+
+  const platform =
+    getPlatform();
+
+  let product = null;
+
+  if (platform === "Shopee") {
+
+    product =
+      getShopeeProduct();
+  }
+
+  if (platform === "Lazada") {
+
+    product =
+      getLazadaProduct();
+  }
+
+  if (!product) {
+
+    console.error(
+      "Unsupported platform"
     );
 
-    return match
-      ? Number(match[0].replace(/,/g, ""))
-      : 0;
+    return null;
   }
 
-  function priceFromText(value) {
-    const match = String(value).match(
-      /(?:₱|PHP|P\s?)\s?([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+(?:\.[0-9]{2})?)/i
+  // ================================
+  // BOGUS DETECTION
+  // ================================
+
+  if (
+    product.rating > 0 &&
+    product.rating < 2.5
+  ) {
+
+    product.status =
+      "bogus";
+  }
+
+  if (
+    product.reviews > 0 &&
+    product.reviews < 5
+  ) {
+
+    product.status =
+      "bogus";
+  }
+
+  const suspiciousWords = [
+
+    "flashsale",
+
+    "quickdeal",
+
+    "cheapshop",
+
+    "freeshipping",
+
+    "limiteddeal",
+
+    "supercheap"
+  ];
+
+  if (product.sellerName) {
+
+    const seller =
+      product.sellerName
+        .toLowerCase();
+
+    const suspicious =
+      suspiciousWords.some(
+        word =>
+          seller.includes(word)
+      );
+
+    if (suspicious) {
+
+      product.status =
+        "bogus";
+    }
+  }
+
+  return product;
+}
+
+// ================================
+// SAVE TO DATABASE
+// ================================
+
+async function saveProduct(product) {
+
+  try {
+
+    const response =
+      await fetch(
+        "http://localhost:5000/api/products",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify(product)
+        }
+      );
+
+    const result =
+      await response.json();
+
+    console.log(
+      "Saved:",
+      result
     );
 
-    return match
-      ? Number(match[1].replace(/,/g, ""))
-      : 0;
-  }
+    return result;
 
-  function decimalFromText(value) {
-    if (!value) return 0;
+  } catch (err) {
 
-    const match = String(value).match(
-      /([0-5](?:\.[0-9])?)/
+    console.error(
+      "Save failed:",
+      err
     );
 
-    return match
-      ? Number(match[1])
-      : 0;
+    return null;
   }
+}
 
-  function detectPlatform() {
-    const host = location.hostname.toLowerCase();
+// ================================
+// SHOW POPUP
+// ================================
 
-    if (host.includes("shopee")) return "Shopee";
+function showPopup(product) {
 
-    if (host.includes("lazada")) return "Lazada";
-
-    return "Unknown";
-  }
-
-  function getPageText() {
-    return (
-      document.body?.innerText
-        ?.replace(/\s+/g, " ")
-        .slice(0, 150000) || ""
-    );
-  }
-
-  function detectDarkPatterns(pageText) {
-    return DARK_PATTERN_RULES
-      .filter((rule) => rule.pattern.test(pageText))
-      .map((rule) => ({
-        type: rule.label,
-        severity: rule.severity,
-        message:
-          `${rule.label} detected. Review the offer carefully before checkout.`,
-      }));
-  }
-
-  function getMetaProductName() {
-    return (
-      attr('meta[property="og:title"]', "content") ||
-      document.title.replace(/\|.*|-.*/g, "").trim()
-    );
-  }
-
-  function normalizedSellerId(sellerName) {
-    return sellerName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "unknown";
-  }
-
-  function extractShopee(pageText) {
-    const sellerName =
-      text("[class*='shop-name']") ||
-      text("[class*='shopName']") ||
-      text("a[href*='/shop/']") ||
-      text("a[href*='shopid']") ||
-      "Unknown seller";
-
-    return {
-      name:
-        firstUsefulText([
-          "h1",
-          "[class*='product-briefing'] [class*='title']",
-          "[class*='product-title']",
-        ]) || getMetaProductName(),
-
-      price: priceFromText(
-        firstUsefulText([
-          "[class*='pmmxKx']",
-          "[class*='price']",
-          "[class*='product-price']",
-        ]) || pageText
-      ),
-
-      rating:
-        decimalFromText(
-          firstUsefulText([
-            "[class*='rating']",
-            "[class*='star']",
-          ])
-        ) ||
-        decimalFromText(
-          pageText.match(
-            /([0-5](?:\.[0-9])?)\s*(?:stars?|rating)/i
-          )?.[0]
-        ),
-
-      reviews: numberFromText(
-        pageText.match(
-          /([0-9,]+)\s*(?:ratings?|reviews?)/i
-        )?.[0]
-      ),
-
-      sellerName,
-
-      sellerId:
-        location.href.match(/shopid=(\d+)/)?.[1] ||
-        attr("[data-seller-id]", "data-seller-id") ||
-        normalizedSellerId(sellerName),
-
-      image: firstImage([
-        "[class*='product'] img",
-        "img[alt*='product']",
-        "img",
-      ]),
-
-      platform: "Shopee",
-    };
-  }
-
-  function extractLazada(pageText) { 
-const sellerName = 
-firstUsefulText([ 
-".seller-name__detail-name", 
-"[class*='seller-name']", 
-"[class*='store-name']", 
-"a[href*='shop']",
- ]) || "Unknown seller";
-
-    return {
-      name:
-        firstUsefulText([
-          "h1",
-          ".pdp-mod-product-badge-title",
-          "[class*='product-title']",
-        ]) || getMetaProductName(),
-
-      price: priceFromText(
-        firstUsefulText([
-          ".pdp-price",
-          "[class*='price']",
-          "[class*='Price']",
-        ]) || pageText
-      ),
-
-      rating:
-        decimalFromText(
-          firstUsefulText([
-            "[class*='score']",
-            "[class*='rating']",
-          ])
-        ) ||
-        decimalFromText(
-          pageText.match(
-            /([0-5](?:\.[0-9])?)\s*(?:stars?|rating)/i
-          )?.[0]
-        ),
-
-      reviews: numberFromText(
-        pageText.match(
-          /([0-9,]+)\s*(?:ratings?|reviews?)/i
-        )?.[0]
-      ),
-
-      sellerName,
-
-      sellerId:
-        location.href.match(/sellerId=(\d+)/i)?.[1] ||
-        attr("[data-seller-id]", "data-seller-id") ||
-        normalizedSellerId(sellerName),
-
-      image: firstImage([
-        ".gallery-preview-panel__image",
-        "[class*='gallery'] img",
-        "[class*='product'] img",
-        "img",
-      ]),
-
-      platform: "Lazada",
-    };
-  }
-
-  function extractGeneric(pageText) {
-    const sellerName =
-      text("[class*='seller']") ||
-      text("[class*='shop']") ||
-      text("[class*='store']") ||
-      "Unknown seller";
-
-    return {
-      name:
-        firstUsefulText([
-          "h1",
-          "[class*='title']",
-          "[class*='product']",
-        ]) ||
-        getMetaProductName() ||
-        "Unknown product",
-
-      price: priceFromText(pageText),
-
-      rating:
-        decimalFromText(
-          pageText.match(
-            /([0-5](?:\.[0-9])?)\s*(?:stars?|rating)/i
-          )?.[0]
-        ) || 0,
-
-      reviews: numberFromText(
-        pageText.match(
-          /([0-9,]+)\s*(?:ratings?|reviews?)/i
-        )?.[0]
-      ),
-
-      sellerName,
-
-      sellerId: normalizedSellerId(sellerName),
-
-      image: firstImage(["img"]),
-
-      platform: detectPlatform(),
-    };
-  }
-
-  function scanPage() {
-    const pageText = getPageText();
-
-    const platform = detectPlatform();
-
-    const base =
-      platform === "Shopee"
-        ? extractShopee(pageText)
-        : platform === "Lazada"
-        ? extractLazada(pageText)
-        : extractGeneric(pageText);
-
-    return {
-      scannedAt: new Date().toISOString(),
-
-      pageUrl: location.href,
-
-      product: {
-        name: base.name || "Unknown product",
-
-        price: base.price || 0,
-
-        image: base.image,
-
-        rating: base.rating || 0,
-
-        reviews: base.reviews || 0,
-
-        status: "verified",
-
-        platform: base.platform || platform,
-
-        sellerId: base.sellerId || "unknown",
-
-        sellerName: base.sellerName || "Unknown seller",
-
-        productUrl: location.href,
-
-        sourceUrl: location.href,
-      },
-
-      seller: {
-        sellerId: base.sellerId || "unknown",
-
-        name: base.sellerName || "Unknown seller",
-
-        platform: base.platform || platform,
-
-        products:
-          numberFromText(
-            text(".shopee-seller-overview__item-text-value") ||
-            text(".seller-info-value") ||
-            text("[class*='product-count']") ||
-            text("[class*='products']") ||
-            pageText.match(/([0-9,]+)\s+products/i)?.[0]
-          ) || 0,
-
-        reports: 0,
-
-        rating:
-          base.rating ||
-          decimalFromText(
-            text("[class*='seller-rating']") ||
-            text("[class*='rating']")
-          ) || 0,
-
-        status: "verified",
-
-        sourceUrl: location.href,
-      },
-
-      warnings: detectDarkPatterns(pageText),
-    };
-  }
-
-  function renderBanner(scan, sellerCheck) {
+  const existing =
     document.getElementById(
-      SHOPGUARD_BANNER_ID
-    )?.remove();
-
-    const allWarnings = [...scan.warnings];
-
-    if (sellerCheck?.risky) {
-      allWarnings.unshift({
-        type: "Bogus seller alert",
-        severity: "critical",
-        message: sellerCheck.message,
-      });
-    }
-
-    const banner = document.createElement("section");
-
-    banner.id = SHOPGUARD_BANNER_ID;
-
-    banner.className = "shopguard-banner";
-
-    banner.innerHTML = `
-      <div class="shopguard-banner__header">
-        <h2 class="shopguard-banner__title">
-          SHOPGUARD SCAN
-        </h2>
-
-        <button
-          class="shopguard-banner__close"
-          type="button"
-          aria-label="Close ShopGuard"
-        >
-          ×
-        </button>
-      </div>
-
-      <div class="shopguard-banner__body">
-        <p class="shopguard-banner__status">
-          ${
-            allWarnings.length
-              ? `${allWarnings.length} warning${
-                  allWarnings.length > 1 ? "s" : ""
-                } found.`
-              : "No bogus seller warning found."
-          }
-        </p>
-
-        <ul class="shopguard-banner__list">
-          <li class="shopguard-banner__item">
-            <strong>Product:</strong>
-            ${scan.product.name}
-          </li>
-
-          <li class="shopguard-banner__item">
-            <strong>Price:</strong>
-            ₱${Number(
-              scan.product.price || 0
-            ).toFixed(2)}
-          </li>
-
-          <li class="shopguard-banner__item">
-            <strong>Seller:</strong>
-            ${scan.seller.name}
-          </li>
-
-          <li class="shopguard-banner__item">
-            <strong>Seller Rating:</strong>
-            ${scan.seller.rating}
-          </li>
-
-          <li class="shopguard-banner__item">
-            <strong>Products:</strong>
-            ${scan.seller.products}
-          </li>
-
-          ${allWarnings
-            .map(
-              (warning) => `
-                <li class="shopguard-banner__item ${
-                  warning.severity === "critical"
-                    ? "shopguard-banner__item--critical"
-                    : ""
-                }">
-                  <strong>${warning.type}:</strong>
-                  ${warning.message}
-                </li>
-              `
-            )
-            .join("")}
-        </ul>
-      </div>
-    `;
-
-    banner
-      .querySelector(".shopguard-banner__close")
-      ?.addEventListener("click", () => {
-        banner.remove();
-      });
-
-    document.documentElement.appendChild(
-      banner
+      "shopguard-popup"
     );
+
+  if (existing) {
+    existing.remove();
   }
 
-  chrome.runtime.onMessage.addListener(
-    (message, _sender, sendResponse) => {
-      if (
-        message.type === "EXTRACT_SHOPGUARD_PAGE"
-      ) {
-        sendResponse({
-          ok: true,
-          scan: scanPage(),
-        });
+  const popup =
+    document.createElement("div");
 
-        return true;
+  popup.id =
+    "shopguard-popup";
+
+  popup.style.position =
+    "fixed";
+
+  popup.style.top =
+    "20px";
+
+  popup.style.right =
+    "20px";
+
+  popup.style.width =
+    "320px";
+
+  popup.style.background =
+    "#0f172a";
+
+  popup.style.color =
+    "white";
+
+  popup.style.padding =
+    "16px";
+
+  popup.style.borderRadius =
+    "12px";
+
+  popup.style.boxShadow =
+    "0 0 20px rgba(0,0,0,0.4)";
+
+  popup.style.zIndex =
+    "999999";
+
+  popup.style.fontFamily =
+    "Arial";
+
+  popup.style.border =
+    "1px solid #334155";
+
+  popup.innerHTML = `
+
+    <h2 style="
+      margin:0 0 10px 0;
+      color:#06b6d4;
+    ">
+      ShopGuard Scan
+    </h2>
+
+    <img
+      src="${product.image}"
+      style="
+        width:100%;
+        height:180px;
+        object-fit:cover;
+        border-radius:8px;
+        margin-bottom:12px;
+      "
+    />
+
+    <p>
+      <strong>Name:</strong>
+      ${product.name}
+    </p>
+
+    <p>
+      <strong>Price:</strong>
+      ₱${product.price.toFixed(2)}
+    </p>
+
+    <p>
+      <strong>Seller:</strong>
+      ${product.sellerName}
+    </p>
+
+    <p>
+      <strong>Rating:</strong>
+      ${product.rating}
+    </p>
+
+    <p>
+      <strong>Reviews:</strong>
+      ${product.reviews}
+    </p>
+
+    <p>
+      <strong>Platform:</strong>
+      ${product.platform}
+    </p>
+
+    <p>
+      <strong>Status:</strong>
+
+      <span style="
+        color:${
+          product.status === "bogus"
+            ? "#ef4444"
+            : "#22c55e"
+        };
+        font-weight:bold;
+      ">
+        ${product.status.toUpperCase()}
+      </span>
+    </p>
+
+    <button
+      id="shopguard-save-btn"
+      style="
+        width:100%;
+        margin-top:12px;
+        padding:10px;
+        border:none;
+        border-radius:8px;
+        background:#06b6d4;
+        color:white;
+        cursor:pointer;
+      "
+    >
+      Save Product
+    </button>
+
+    <button
+      id="shopguard-close-btn"
+      style="
+        width:100%;
+        margin-top:8px;
+        padding:10px;
+        border:none;
+        border-radius:8px;
+        background:#334155;
+        color:white;
+        cursor:pointer;
+      "
+    >
+      Close
+    </button>
+  `;
+
+  document.body.appendChild(
+    popup
+  );
+
+  // CLOSE
+  document
+    .getElementById(
+      "shopguard-close-btn"
+    )
+    .addEventListener(
+      "click",
+      () => {
+
+        popup.remove();
       }
+    );
 
-      if (
-        message.type === "SHOW_SHOPGUARD_BANNER"
-      ) {
-        renderBanner(
-          message.payload.scan,
-          message.payload.sellerCheck
+  // SAVE
+  document
+    .getElementById(
+      "shopguard-save-btn"
+    )
+    .addEventListener(
+      "click",
+      async () => {
+
+        const result =
+          await saveProduct(
+            product
+          );
+
+        if (result) {
+
+          alert(
+            "Product saved to ShopGuard"
+          );
+
+        } else {
+
+          alert(
+            "Save failed"
+          );
+        }
+      }
+    );
+}
+
+// ================================
+// MESSAGE LISTENER
+// ================================
+
+chrome.runtime.onMessage.addListener(
+  (
+    message,
+    sender,
+    sendResponse
+  ) => {
+
+    if (
+      message.action ===
+      "SCAN_PRODUCT"
+    ) {
+
+      try {
+
+        const product =
+          scanProduct();
+
+        console.log(
+          "SCANNED PRODUCT:",
+          product
         );
 
+        if (product) {
+
+          showPopup(product);
+
+          sendResponse({
+
+            success: true,
+
+            product
+          });
+
+        } else {
+
+          sendResponse({
+
+            success: false
+          });
+        }
+
+      } catch (err) {
+
+        console.error(err);
+
         sendResponse({
-          ok: true,
+
+          success: false,
+
+          error: err.message
         });
-
-        return true;
       }
-
-      return false;
     }
+
+    return true;
+  }
+);
+
+// ================================
+// PAGE DETECTOR
+// ================================
+
+function isProductPage() {
+
+  return (
+
+    location.href.includes(
+      "/product/"
+    ) ||
+
+    location.href.includes(
+      "-i."
+    ) ||
+
+    location.href.includes(
+      "/products/"
+    )
   );
-})();
+}
+
+// ================================
+// AUTO LOG
+// ================================
+
+if (isProductPage()) {
+
+  console.log(
+    "ShopGuard detected product page"
+  );
+}

@@ -1,559 +1,285 @@
-const controls = [
-  "enabled",
-  "darkPatternDetection",
-  "sellerWarnings",
-  "priceScanner",
-];
+// ================================
+// SHOPGUARD POPUP SCRIPT
+// popup.js
+// ================================
 
-const statusBox =
-  document.getElementById("statusBox");
+console.log("ShopGuard popup loaded");
 
-const resultBox =
-  document.getElementById("resultBox");
+// ================================
+// ELEMENTS
+// ================================
 
-const addButton =
-  document.getElementById("addItem");
+const scanBtn = document.getElementById("scanBtn");
 
-const deleteButton =
-  document.getElementById("deleteItem");
+const resultBox = document.getElementById("result");
 
-let currentScan = null;
+const statusText = document.getElementById("status");
 
-let currentSellerCheck = null;
+// ================================
+// SHOW STATUS
+// ================================
 
-let addedProductId = null;
+function setStatus(text, color = "#06b6d4") {
 
-function sendMessage(message) {
-  return new Promise((resolve) =>
-    chrome.runtime.sendMessage(
-      message,
-      resolve
-    )
-  );
+  statusText.textContent = text;
+
+  statusText.style.color = color;
 }
 
-function setStatus(
-  message,
-  warning = false
-) {
-  statusBox.textContent = message;
+// ================================
+// SHOW PRODUCT
+// ================================
 
-  statusBox.classList.toggle(
-    "popup__status--warning",
-    warning
-  );
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function renderScan(scan, sellerCheck) {
-  const warnings = [
-    ...(scan?.warnings || []),
-  ];
-
-  if (sellerCheck?.risky) {
-    warnings.unshift({
-      type: "Bogus seller alert",
-      severity: "critical",
-      message: sellerCheck.message,
-    });
-  }
-
-  resultBox.classList.remove(
-    "result--empty"
-  );
+function showProduct(product) {
 
   resultBox.innerHTML = `
-    <article class="product-card">
+  
+    <div style="
+      margin-top:12px;
+      padding:12px;
+      background:#1e293b;
+      border-radius:10px;
+      color:white;
+    ">
+
       <img
-        src="${escapeHtml(
-          scan.product.image
-        )}"
-        alt="${escapeHtml(
-          scan.product.name
-        )}"
+        src="${product.image}"
+        style="
+          width:100%;
+          height:180px;
+          object-fit:cover;
+          border-radius:8px;
+          margin-bottom:10px;
+        "
       />
 
-      <div class="data-grid">
+      <h3 style="
+        margin:0;
+        font-size:16px;
+      ">
+        ${product.name}
+      </h3>
 
-        <div class="data-row">
-          <span class="data-label">
-            Name
-          </span>
+      <p style="
+        margin:8px 0;
+        color:#94a3b8;
+      ">
+        ${product.platform}
+      </p>
 
-          <strong>
-            ${escapeHtml(
-              scan.product.name
-            )}
-          </strong>
-        </div>
+      <p style="
+        margin:8px 0;
+      ">
+        <strong>Price:</strong>
+        ₱${Number(product.price).toFixed(2)}
+      </p>
 
-        <div class="data-row">
-          <span class="data-label">
-            Price
-          </span>
+      <p style="
+        margin:8px 0;
+      ">
+        <strong>Seller:</strong>
+        ${product.sellerName}
+      </p>
 
-          <span>
-            ₱${Number(
-              scan.product.price || 0
-            ).toFixed(2)}
-          </span>
-        </div>
+      <p style="
+        margin:8px 0;
+      ">
+        <strong>Rating:</strong>
+        ${product.rating}
+      </p>
 
-        <div class="data-row">
-          <span class="data-label">
-            Rating
-          </span>
+      <p style="
+        margin:8px 0;
+      ">
+        <strong>Status:</strong>
 
-          <span>
-            ${Number(
-              scan.product.rating || 0
-            ).toFixed(1)}
-            (${Number(
-              scan.product.reviews || 0
-            )} reviews)
-          </span>
-        </div>
+        <span style="
+          color:${product.status === "bogus"
+            ? "#ef4444"
+            : "#22c55e"};
+          font-weight:bold;
+        ">
+          ${product.status.toUpperCase()}
+        </span>
+      </p>
 
-        <div class="data-row">
-          <span class="data-label">
-            Platform
-          </span>
+      <button
+        id="saveBtn"
+        style="
+          width:100%;
+          padding:10px;
+          border:none;
+          border-radius:8px;
+          background:#06b6d4;
+          color:white;
+          cursor:pointer;
+          margin-top:10px;
+        "
+      >
+        Save Product
+      </button>
 
-          <span>
-            ${escapeHtml(
-              scan.product.platform
-            )}
-          </span>
-        </div>
-
-        <div class="data-row">
-          <span class="data-label">
-            Seller
-          </span>
-
-          <span>
-            ${escapeHtml(
-              scan.seller.name
-            )}
-          </span>
-        </div>
-
-        <div class="data-row">
-          <span class="data-label">
-            Seller ID
-          </span>
-
-          <span>
-            ${escapeHtml(
-              scan.seller.sellerId
-            )}
-          </span>
-        </div>
-
-        <div class="data-row">
-          <span class="data-label">
-            Seller Rating
-          </span>
-
-          <span>
-            ${Number(
-              scan.seller.rating || 0
-            ).toFixed(1)}
-          </span>
-        </div>
-
-        <div class="data-row">
-          <span class="data-label">
-            Products
-          </span>
-
-          <span>
-            ${Number(
-              scan.seller.products || 0
-            )}
-          </span>
-        </div>
-
-      </div>
-
-      <div class="warning-list">
-        ${
-          warnings.length
-            ? warnings
-                .map(
-                  (warning) => `
-                    <div class="warning ${
-                      warning.severity ===
-                      "critical"
-                        ? "warning--critical"
-                        : ""
-                    }">
-                      <strong>
-                        ${escapeHtml(
-                          warning.type
-                        )}:
-                      </strong>
-
-                      ${escapeHtml(
-                        warning.message
-                      )}
-                    </div>
-                  `
-                )
-                .join("")
-            : `
-              <div class="warning">
-                <strong>
-                  Seller check:
-                </strong>
-
-                ${escapeHtml(
-                  sellerCheck?.message ||
-                    "No warning found."
-                )}
-              </div>
-            `
-        }
-      </div>
-    </article>
+    </div>
   `;
 
-  addButton.disabled = false;
+  // SAVE BUTTON
+  document
+    .getElementById("saveBtn")
+    .addEventListener("click", () => {
 
-  deleteButton.disabled = false;
-}
-
-async function loadSettings() {
-  const settings = await sendMessage({
-    type: "GET_SETTINGS",
-  });
-
-  controls.forEach((id) => {
-    const input =
-      document.getElementById(id);
-
-    input.checked = Boolean(
-      settings[id]
-    );
-
-    input.addEventListener(
-      "change",
-      saveSettings
-    );
-  });
-
-  const saved =
-    await chrome.storage.local.get([
-      "lastScan",
-      "lastSellerCheck",
-      "lastAddedProductId",
-    ]);
-
-  currentScan =
-    saved.lastScan || null;
-
-  currentSellerCheck =
-    saved.lastSellerCheck || null;
-
-  addedProductId =
-    saved.lastAddedProductId || null;
-
-  if (currentScan) {
-    renderScan(
-      currentScan,
-      currentSellerCheck
-    );
-
-    setStatus(
-      addedProductId
-        ? "Last scan is already added to the web app."
-        : "Last scan loaded. You can add or delete it.",
-      currentSellerCheck?.risky
-    );
-  } else {
-    setStatus(
-      settings.enabled
-        ? "Ready to scan this page."
-        : "Extension is disabled. Enable it in settings."
-    );
-  }
-}
-
-async function saveSettings() {
-  const payload = {};
-
-  controls.forEach((id) => {
-    payload[id] =
-      document.getElementById(id)
-        .checked;
-  });
-
-  await sendMessage({
-    type: "SAVE_SETTINGS",
-    payload,
-  });
-
-  setStatus(
-    payload.enabled
-      ? "Settings saved. Protection is active."
-      : "Settings saved. Protection is disabled."
-  );
-}
-
-async function scanCurrentPage() {
-  setStatus(
-    "Scanning current page..."
-  );
-
-  addButton.disabled = true;
-
-  deleteButton.disabled = true;
-
-  const [tab] =
-    await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
+      saveProduct(product);
     });
+}
 
-  if (!tab?.id) {
-    setStatus(
-      "Could not access the current tab.",
-      true
-    );
+// ================================
+// SAVE PRODUCT
+// ================================
 
-    return;
-  }
+async function saveProduct(product) {
 
   try {
-    await chrome.scripting.executeScript(
+
+    setStatus("Saving product...", "#facc15");
+
+    const response = await fetch(
+      "http://localhost:5000/api/products",
       {
-        target: { tabId: tab.id },
-        files: ["content.js"],
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify(product)
       }
     );
 
-    const response =
-      await chrome.tabs.sendMessage(
-        tab.id,
-        {
-          type: "EXTRACT_SHOPGUARD_PAGE",
-        }
+    const result = await response.json();
+
+    console.log(result);
+
+    if (response.ok) {
+
+      setStatus(
+        "Product saved successfully",
+        "#22c55e"
       );
 
-    if (!response?.ok) {
-      throw new Error("Scan failed");
+    } else {
+
+      setStatus(
+        result.error || "Save failed",
+        "#ef4444"
+      );
     }
 
-    currentScan = response.scan;
+  } catch (err) {
 
-    const sellerResponse =
-      await sendMessage({
-        type: "CHECK_SELLER",
-        payload: currentScan.seller,
-      });
+    console.error(err);
 
-    currentSellerCheck =
-      sellerResponse?.ok
-        ? sellerResponse.result
-        : {
-            found: false,
-            risky: false,
-            message:
-              "Backend seller check unavailable.",
-          };
+    setStatus(
+      "Server connection failed",
+      "#ef4444"
+    );
+  }
+}
 
-    addedProductId = null;
+// ================================
+// SCAN BUTTON
+// ================================
 
-    await chrome.storage.local.set({
-      lastScan: currentScan,
-      lastSellerCheck:
-        currentSellerCheck,
-      lastAddedProductId: null,
+scanBtn.addEventListener("click", async () => {
+
+  try {
+
+    setStatus("Scanning product...", "#facc15");
+
+    // GET ACTIVE TAB
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true
     });
 
-    await chrome.tabs.sendMessage(
+    if (!tab.id) {
+
+      setStatus(
+        "No active tab found",
+        "#ef4444"
+      );
+
+      return;
+    }
+
+    // SEND MESSAGE TO CONTENT SCRIPT
+    chrome.tabs.sendMessage(
       tab.id,
       {
-        type: "SHOW_SHOPGUARD_BANNER",
-        payload: {
-          scan: currentScan,
-          sellerCheck:
-            currentSellerCheck,
-        },
+        action: "SCAN_PRODUCT"
+      },
+      (response) => {
+
+        // ERROR CHECK
+        if (chrome.runtime.lastError) {
+
+          console.error(
+            chrome.runtime.lastError
+          );
+
+          setStatus(
+            "Open a Shopee/Lazada product page first",
+            "#ef4444"
+          );
+
+          return;
+        }
+
+        // NO RESPONSE
+        if (!response) {
+
+          setStatus(
+            "No response from page",
+            "#ef4444"
+          );
+
+          return;
+        }
+
+        // SUCCESS
+        if (response.success) {
+
+          setStatus(
+            "Scan complete",
+            "#22c55e"
+          );
+
+          showProduct(response.product);
+
+        } else {
+
+          setStatus(
+            "Product scan failed",
+            "#ef4444"
+          );
+        }
       }
     );
 
-    renderScan(
-      currentScan,
-      currentSellerCheck
-    );
+  } catch (err) {
+
+    console.error(err);
 
     setStatus(
-      currentSellerCheck.risky
-        ? "Warning: seller is risky or bogus."
-        : "Scan complete. No bogus seller warning found.",
-      currentSellerCheck.risky
-    );
-  } catch (error) {
-    setStatus(
-      `Scan failed: ${error.message}. Reload the Lazada/Shopee page and try again.`,
-      true
+      "Unexpected error",
+      "#ef4444"
     );
   }
-}
+});
 
-async function addCurrentScan() {
-  if (!currentScan) return;
+// ================================
+// INITIAL STATUS
+// ================================
 
-  setStatus(
-    "Adding product and seller to the web app..."
-  );
-
-  const status =
-    currentSellerCheck?.risky
-      ? "bogus"
-      : "verified";
-
-  const payload = {
-    seller: {
-      ...currentScan.seller,
-
-      status:
-        currentSellerCheck?.seller
-          ?.status || status,
-
-      reason:
-        currentSellerCheck?.seller
-          ?.reason ||
-        (currentSellerCheck?.risky
-          ? currentSellerCheck.message
-          : undefined),
-    },
-
-    product: {
-      ...currentScan.product,
-
-      status,
-    },
-  };
-
-  const response =
-    await sendMessage({
-      type: "ADD_SCANNED_ITEM",
-      payload,
-    });
-
-  if (!response?.ok) {
-    setStatus(
-      `Add failed: ${
-        response?.error ||
-        "Backend unavailable"
-      }`,
-      true
-    );
-
-    return;
-  }
-
-  addedProductId =
-    response.product.id;
-
-  await chrome.storage.local.set({
-    lastAddedProductId:
-      addedProductId,
-  });
-
-  setStatus(
-    "Added to the web app. Refresh the dashboard Products/Sellers page to see it."
-  );
-}
-
-async function deleteCurrentScan() {
-  const response =
-    await sendMessage({
-      type: "DELETE_SCANNED_ITEM",
-
-      payload: {
-        productId: addedProductId,
-      },
-    });
-
-  if (!response?.ok) {
-    setStatus(
-      `Delete failed: ${
-        response?.error ||
-        "Could not delete scan"
-      }`,
-      true
-    );
-
-    return;
-  }
-
-  currentScan = null;
-
-  currentSellerCheck = null;
-
-  addedProductId = null;
-
-  resultBox.classList.add(
-    "result--empty"
-  );
-
-  resultBox.innerHTML = `
-    <p>
-      No scan yet. Open a Lazada or
-      Shopee product page and click
-      Scan page.
-    </p>
-  `;
-
-  addButton.disabled = true;
-
-  deleteButton.disabled = true;
-
-  setStatus(
-    "Scan deleted from extension storage. If it was added, the product was removed from the database."
-  );
-}
-
-document
-  .getElementById("scanPage")
-  .addEventListener(
-    "click",
-    scanCurrentPage
-  );
-
-document
-  .getElementById("addItem")
-  .addEventListener(
-    "click",
-    addCurrentScan
-  );
-
-document
-  .getElementById("deleteItem")
-  .addEventListener(
-    "click",
-    deleteCurrentScan
-  );
-
-document
-  .getElementById("openDashboard")
-  .addEventListener(
-    "click",
-    () =>
-      sendMessage({
-        type: "OPEN_DASHBOARD",
-      })
-  );
-
-loadSettings();
+setStatus(
+  "Ready to scan",
+  "#06b6d4"
+);
