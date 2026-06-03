@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import Product from '../models/Product.js';
+import Seller from '../models/Seller.js';
 
 const router = Router();
 
@@ -9,7 +10,6 @@ const router = Router();
 // ========================================
 
 router.get('/', async (req, res) => {
-
   try {
 
     const {
@@ -62,10 +62,11 @@ router.get('/', async (req, res) => {
       filter.category = category;
     }
 
-    const products = await Product.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(Number(limit))
-      .lean();
+    const products =
+      await Product.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(Number(limit))
+        .lean();
 
     res.json(products);
 
@@ -85,22 +86,25 @@ router.get('/', async (req, res) => {
 // ========================================
 
 router.get('/stats', async (req, res) => {
-
   try {
 
-    const total = await Product.countDocuments();
+    const total =
+      await Product.countDocuments();
 
-    const verified = await Product.countDocuments({
-      status: 'verified'
-    });
+    const verified =
+      await Product.countDocuments({
+        status: 'verified'
+      });
 
-    const bogus = await Product.countDocuments({
-      status: 'bogus'
-    });
+    const bogus =
+      await Product.countDocuments({
+        status: 'bogus'
+      });
 
-    const pending = await Product.countDocuments({
-      status: 'pending'
-    });
+    const pending =
+      await Product.countDocuments({
+        status: 'pending'
+      });
 
     res.json({
       total,
@@ -123,12 +127,12 @@ router.get('/stats', async (req, res) => {
 // ========================================
 
 router.get('/:id', async (req, res) => {
-
   try {
 
-    const product = await Product.findById(
-      req.params.id
-    ).lean();
+    const product =
+      await Product.findById(
+        req.params.id
+      ).lean();
 
     if (!product) {
 
@@ -153,11 +157,9 @@ router.get('/:id', async (req, res) => {
 // ========================================
 
 router.post('/', async (req, res) => {
-
   try {
 
     const {
-
       name,
       price,
       image,
@@ -167,8 +169,8 @@ router.post('/', async (req, res) => {
       reviews,
       url,
       sellerName,
-      sellerId
-
+      sellerId,
+      status: incomingStatus
     } = req.body;
 
     // ========================================
@@ -193,9 +195,10 @@ router.post('/', async (req, res) => {
     // CHECK DUPLICATE
     // ========================================
 
-    const existing = await Product.findOne({
-      url
-    });
+    const existing =
+      await Product.findOne({
+        url
+      });
 
     if (existing) {
 
@@ -210,19 +213,16 @@ router.post('/', async (req, res) => {
     // AUTO DETECT STATUS
     // ========================================
 
-    let status = 'verified';
+    let status =
+      incomingStatus || 'verified';
 
-    // LOW RATING
-    if (rating && rating < 2.5) {
-      status = 'bogus';
-    }
+    // LazMall auto verified
+    const isLazMall =
+      (sellerName || '')
+        .toLowerCase()
+        .includes('mall');
 
-    // VERY LOW REVIEWS
-    if (reviews && reviews < 5) {
-      status = 'bogus';
-    }
-
-    // SUSPICIOUS SELLERS
+    // suspicious seller keywords
     const suspiciousSellers = [
       'flashsale',
       'quickdeal',
@@ -231,18 +231,98 @@ router.post('/', async (req, res) => {
       'limiteddeal'
     ];
 
+    const lowerSeller =
+      (sellerName || '')
+        .toLowerCase();
+
+    const suspicious =
+      suspiciousSellers.some(keyword =>
+        lowerSeller.includes(keyword)
+      );
+
+    // only bogus if highly suspicious
+    if (
+      !isLazMall &&
+      (
+        (rating > 0 && rating < 2.5) ||
+        (
+          reviews > 0 &&
+          reviews < 3 &&
+          suspicious
+        )
+      )
+    ) {
+      status = 'bogus';
+    }
+
+    // ========================================
+    // CREATE OR UPDATE SELLER
+    // ========================================
+
     if (sellerName) {
 
-      const lowerSeller =
-        sellerName.toLowerCase();
+      const existingSeller =
+        await Seller.findOne({
+          name: sellerName
+        });
 
-      const suspicious =
-        suspiciousSellers.some(keyword =>
-          lowerSeller.includes(keyword)
-        );
+      if (!existingSeller) {
 
-      if (suspicious) {
-        status = 'bogus';
+        await Seller.create({
+
+          name: sellerName,
+
+          platform:
+            platform || 'Lazada',
+
+          products: 1,
+
+          reports:
+            status === 'bogus'
+              ? 1
+              : 0,
+
+          rating:
+            rating || 0,
+
+          status:
+            status === 'bogus'
+              ? 'flagged'
+              : 'verified',
+
+          reason:
+            status === 'bogus'
+              ? 'Suspicious products detected'
+              : '',
+
+          url: url || ''
+        });
+
+      } else {
+
+        // increment product count
+        existingSeller.products += 1;
+
+        // update rating average
+        existingSeller.rating =
+          (
+            existingSeller.rating +
+            (rating || 0)
+          ) / 2;
+
+        // bogus product found
+        if (status === 'bogus') {
+
+          existingSeller.reports += 1;
+
+          existingSeller.status =
+            'flagged';
+
+          existingSeller.reason =
+            'Suspicious products detected';
+        }
+
+        await existingSeller.save();
       }
     }
 
@@ -250,35 +330,41 @@ router.post('/', async (req, res) => {
     // CREATE PRODUCT
     // ========================================
 
-    const product = await Product.create({
+    const product =
+      await Product.create({
 
-      name,
+        name,
 
-      price,
+        price,
 
-      originalPrice: price,
+        originalPrice: price,
 
-      image: image || '',
+        image: image || '',
 
-      category: category || 'Others',
+        category:
+          category || 'Others',
 
-      platform: platform || 'Unknown',
+        platform:
+          platform || 'Unknown',
 
-      rating: rating || 0,
+        rating:
+          rating || 0,
 
-      reviews: reviews || 0,
+        reviews:
+          reviews || 0,
 
-      status,
+        status,
 
-      inStock: true,
+        inStock: true,
 
-      url: url || '',
+        url: url || '',
 
-      sellerName: sellerName || '',
+        sellerName:
+          sellerName || '',
 
-      sellerId: sellerId || ''
-
-    });
+        sellerId:
+          sellerId || ''
+      });
 
     res.status(201).json({
       success: true,
@@ -302,7 +388,6 @@ router.post('/', async (req, res) => {
 // ========================================
 
 router.put('/:id', async (req, res) => {
-
   try {
 
     const product =
@@ -341,7 +426,6 @@ router.put('/:id', async (req, res) => {
 // ========================================
 
 router.delete('/:id', async (req, res) => {
-
   try {
 
     const product =
@@ -376,7 +460,6 @@ router.delete('/:id', async (req, res) => {
 // ========================================
 
 router.put('/:id/verify', async (req, res) => {
-
   try {
 
     const product =
@@ -417,7 +500,6 @@ router.put('/:id/verify', async (req, res) => {
 // ========================================
 
 router.put('/:id/bogus', async (req, res) => {
-
   try {
 
     const product =

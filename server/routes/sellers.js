@@ -39,6 +39,35 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ========================================
+// CHECK SELLER STATUS
+// GET /api/sellers/check/:sellerName
+// ========================================
+router.get('/check/:sellerName', async (req, res) => {
+  try {
+    const sellerName = req.params.sellerName;
+
+    const seller = await Seller.findOne({
+      name: sellerName
+    }).lean();
+
+    if (!seller) {
+      return res.json({
+        status: "unknown"
+      });
+    }
+
+    return res.json({
+      status: seller.status
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      status: "error"
+    });
+  }
+});
+
 // GET /api/sellers/:id
 router.get('/:id', async (req, res) => {
   try {
