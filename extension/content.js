@@ -1,769 +1,855 @@
 // ================================
+
 // SHOPGUARD CONTENT SCRIPT
-// content.js
+
 // ================================
 
 console.log("ShopGuard content script loaded");
 
 // ================================
+
 // DETECT PLATFORM
+
 // ================================
 
 function getPlatform() {
 
-  if (location.hostname.includes("shopee")) {
-    return "Shopee";
-  }
+  if (location.hostname.includes("shopee")) return "Shopee";
 
-  if (location.hostname.includes("lazada")) {
-    return "Lazada";
-  }
+  if (location.hostname.includes("lazada")) return "Lazada";
 
   return "Unknown";
+
 }
 
 // ================================
+
 // CLEAN PRICE
+
 // ================================
 
 function cleanPrice(priceText) {
 
   if (!priceText) return 0;
 
-  const cleaned =
-    priceText
-      .replace(/[₱,\s]/g, "")
-      .replace(/[^\d.]/g, "");
+  const cleaned = priceText
 
-  const value =
-    parseFloat(cleaned);
+    .replace(/[₱,\s]/g, "")
 
-  return isNaN(value)
-    ? 0
-    : value;
+    .replace(/[^\d.]/g, "");
+
+  const value = parseFloat(cleaned);
+
+  return isNaN(value) ? 0 : value;
+
 }
 
 // ================================
+
 // CLEAN RATING
+
 // ================================
 
 function cleanRating(ratingText) {
 
   if (!ratingText) return 0;
 
-  const value =
-    parseFloat(
-      ratingText.replace(/[^\d.]/g, "")
+  const value = parseFloat(
+
+    ratingText.replace(/[^\d.]/g, "")
+
+  );
+
+  return isNaN(value) ? 0 : value;
+
+}
+
+// ================================
+
+// CHECK SELLER STATUS FROM API
+
+// ================================
+
+async function checkSellerStatus(sellerName) {
+
+  try {
+
+    const res = await fetch(
+
+      `http://localhost:5000/api/sellers/check/${encodeURIComponent(sellerName)}`
+
     );
 
-  return isNaN(value)
-    ? 0
-    : value;
+    const data = await res.json();
+
+    return data.status || "unknown";
+
+  } catch (err) {
+
+    return "unknown";
+
+  }
 }
 
 // ================================
+
 // GET SHOPEE PRODUCT
+
 // ================================
 
-function getShopeeProduct() {
+async function getShopeeProduct() {
 
-  // Wait-safe helper
-  const getText = (selectors) => {
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el && el.innerText.trim()) {
-        return el.innerText.trim();
-      }
+    // NAME
+
+    const name = document.querySelector(".VCNVHn")?.textContent?.trim() 
+
+                 || document.querySelector(".qaNIZv")?.textContent?.trim() 
+
+                 || document.querySelector("h1")?.textContent?.trim() 
+
+                 || "Unknown Product";
+
+    // ==================== PRICE DETECTION ====================
+
+    let price = 0;
+
+    let originalPrice = 0;
+
+    // FIXED: Target the exact div class shown in your screenshot
+
+    let priceEl = document.querySelector(".IZPeQz.B670Q0") 
+
+               || document.querySelector(".IZPeQz") 
+
+               || document.querySelector(".B670Q0")
+
+               || document.querySelector("div[class*='IZPeQz']")
+
+               || document.querySelector(".IZPeQ.B670Q0"); // fallback for possible class variation
+
+    if (priceEl) {
+
+        const text = priceEl.textContent?.trim() || "";
+
+        console.log("Price element found:", text);
+
+        
+
+        if (text.includes("₱")) {
+
+            price = cleanPrice(text);
+
+        }
+
     }
-    return "";
-  };
 
-  // ================================
-  // NAME
-  // ================================
-  const name = getText([
-    "h1",
-    '[data-testid="pdp-product-title"]',
-    ".VCNVHn",
-    ".qaNIZv"
-  ]);
+    // General fallback (kept unchanged as backup)
 
-  // ================================
-  // PRICE (avoid shipping price)
-  // ================================
-  let price = 0;
+    if (!price) {
 
-  const priceContainer = document.querySelectorAll("span");
+        const priceSelectors = [
 
-  priceContainer.forEach(el => {
-    const text = el.innerText.trim();
+            "div[class*='price']",
 
-    if (
-      text.startsWith("₱") &&
-      text.length < 20 &&                // avoid long promo strings
-      !text.toLowerCase().includes("off") &&
-      !text.toLowerCase().includes("shipping")
-    ) {
-      const value = parseFloat(text.replace(/[₱,]/g, ""));
-      if (value > price) {               // pick highest realistic price
-        price = value;
-      }
+            "span[class*='price']",
+
+            ".pqTWkA",
+
+            "._3c9f6o",
+
+            "[class*='product-price']"
+
+        ];
+
+        for (const selector of priceSelectors) {
+
+            const els = document.querySelectorAll(selector);
+
+            for (const el of els) {
+
+                const text = el.textContent?.trim() || "";
+
+                if (text.includes("₱")) {
+
+                    const num = cleanPrice(text);
+
+                    if (num > 10 && num < 1000000) {
+
+                        if (el.style.textDecoration?.includes("line-through") || el.closest("del")) {
+
+                            originalPrice = num;
+
+                        } else if (!price) {
+
+                            price = num;
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
     }
-  });
 
-  // ================================
-  // SELLER (real seller only)
-  // ================================
-  let seller = "";
+    // Last fallback (unchanged)
 
-  const sellerLinks = document.querySelectorAll("a[href*='shop']");
+    if (!price) {
 
-  sellerLinks.forEach(link => {
-    const text = link.innerText.trim();
-    if (
-      text &&
-      text.length > 2 &&
-      !text.toLowerCase().includes("seller centre") &&
-      !text.toLowerCase().includes("chat now") &&
-      !text.toLowerCase().includes("visit")
-    ) {
-      seller = text;
+        const allEls = document.querySelectorAll("div, span");
+
+        for (const el of allEls) {
+
+            const text = el.textContent?.trim() || "";
+
+            if (text.includes("₱") && text.length < 30) {
+
+                const num = cleanPrice(text);
+
+                if (num > 10 && num < 1000000) {
+
+                    price = num;
+
+                    break;
+
+                }
+
+            }
+
+        }
+
     }
-  });
 
-  // ================================
-  // RATING
-  // ================================
-  let rating = 0;
+    // ==================== RATING (unchanged) ====================
 
-  const ratingMatch = document.body.innerText.match(/\b([1-5]\.\d)\b/);
-  if (ratingMatch) {
-    const val = parseFloat(ratingMatch[1]);
-    if (val >= 1 && val <= 5) {
-      rating = val;
+    let rating = 0;
+
+    const ratingSelectors = [".shopee-rating", "._1cT8t3", "span[class*='rating']", "div[class*='rating']"];
+
+    for (const selector of ratingSelectors) {
+
+        const el = document.querySelector(selector);
+
+        if (el) {
+
+            const text = el.textContent?.trim() || "";
+
+            const match = text.match(/(\d\.\d)/);
+
+            if (match) {
+
+                rating = parseFloat(match[1]);
+
+                break;
+
+            }
+
+        }
+
     }
-  }
 
-  // ================================
-  // REVIEWS
-  // ================================
-  let reviews = 0;
+    if (!rating) {
 
-  const reviewMatch = document.body.innerText.match(/([\d,]+)\s*Ratings/i);
-  if (reviewMatch) {
-    reviews = parseInt(reviewMatch[1].replace(/,/g, "")) || 0;
-  }
+        const ratingEl = Array.from(document.querySelectorAll("span, div")).find(el => {
 
-  // ================================
-  // IMAGE (Shopee lazy loads via data-src)
-  // ================================
-  let image = "";
+            const t = el.textContent?.trim();
 
-  const images = document.querySelectorAll("img");
+            return /^\d\.\d$/.test(t) && parseFloat(t) >= 1 && parseFloat(t) <= 5;
 
-  images.forEach(img => {
-    const src =
-      img.getAttribute("src") ||
-      img.getAttribute("data-src") ||
-      img.getAttribute("data-lazy-src");
+        });
 
-    if (
-      src &&
-      src.startsWith("http") &&
-      !src.includes("avatar") &&
-      !src.includes("icon")
-    ) {
-      image = src;
+        if (ratingEl) rating = cleanRating(ratingEl.textContent);
+
     }
-  });
 
-  // ================================
-  // AUTO BOGUS DETECTION
-  // ================================
-  let status = "verified";
+    // ==================== SELLER (unchanged) ====================
 
-  if (rating > 0 && rating < 2.5) status = "bogus";
-  if (reviews > 0 && reviews < 5) status = "bogus";
+    let seller = "";
 
-  return {
-    name,
-    price: price || 0,
-    originalPrice: price || 0,
-    image,
-    category: "Unknown",
-    platform: "Shopee",
-    rating,
-    reviews,
-    status,
-    inStock: true,
-    url: location.href,
-    sellerName: seller || "Unknown Seller",
-    sellerId: (seller || "unknown")
-      .toLowerCase()
-      .replace(/\s/g, "_")
-  };
+    let sellerEl = document.querySelector(".fV3TIn") || document.querySelector(".FV3TIn") || document.querySelector("div[class*='V3TIn']");
+
+    if (sellerEl) {
+
+        seller = sellerEl.textContent?.trim() || "";
+
+        console.log("Seller element found:", seller);
+
+    }
+
+    if (!seller || seller.length < 3) {
+
+        const sellerSelectors = [".UWctNB", "._6HeM6T", "a[href*='shop']", ".seller-name", "[class*='seller']", "div[class*='shop-name']"];
+
+        for (const selector of sellerSelectors) {
+
+            const el = document.querySelector(selector);
+
+            if (el) {
+
+                const text = el.textContent?.trim();
+
+                if (text && text.length > 3 && text.length < 60 && !text.toLowerCase().includes("shopee") && !text.toLowerCase().includes("official")) {
+
+                    seller = text;
+
+                    break;
+
+                }
+
+            }
+
+        }
+
+    }
+
+    // IMAGE (unchanged)
+
+    let image = "";
+
+    const imageSelectors = [
+
+        "img[alt*='product']",
+
+        "img[alt*='Product']",
+
+        ".product-image img",
+
+        ".gallery img",
+
+        "div[class*='gallery'] img",
+
+        "img[width][height]"
+
+    ];
+
+    for (const selector of imageSelectors) {
+
+        const img = document.querySelector(selector);
+
+        if (img && img.src && !img.src.includes("logo") && !img.src.includes("icon")) {
+
+            image = img.src;
+
+            break;
+
+        }
+
+    }
+
+    if (!image) {
+
+        const mainImg = document.querySelector("img");
+
+        if (mainImg) image = mainImg.src;
+
+    }
+
+    // REVIEWS (unchanged)
+
+    let reviews = 0;
+
+    const reviewMatch = document.body.innerText.match(/(\d+[,\d]*)\s*Ratings?/i);
+
+    if (reviewMatch) reviews = parseInt(reviewMatch[1].replace(/,/g, "")) || 0;
+
+// ✅ CHECK SELLER STATUS
+
+  const sellerStatus =
+
+    await checkSellerStatus(seller);
+
+    return {
+
+        name,
+
+        price: Number(price.toFixed(2)),
+
+        originalPrice: Number((originalPrice || price).toFixed(2)),
+
+        image,
+
+        category: "Unknown",
+
+        platform: "Shopee",
+
+        rating,
+
+        reviews,
+
+        status: "verified",
+
+        inStock: true,
+
+        url: location.href,
+
+        sellerName: seller || "Unknown Seller",
+
+        sellerId: (seller || "unknown").toLowerCase().replace(/\s/g, "_"),
+
+        sellerStatus
+
+    };
+
 }
 
-
 // ================================
+
 // GET LAZADA PRODUCT
+
 // ================================
 
-function getLazadaProduct() {
+async function getLazadaProduct() {
+
+  // =========================
 
   // NAME
+
+  // =========================
+
   const name =
+
     document.querySelector("h1")?.textContent?.trim() ||
+
+    document.querySelector(".pdp-mod-product-badge-title")?.textContent?.trim() ||
 
     "";
 
-  // ================================
+  // =========================
+
   // PRICE
-  // ================================
+
+  // =========================
 
   let price = "";
 
-  const priceSelectors = [
+  const allText =
 
-    ".pdp-price",
+    document.body.innerText || "";
 
-    ".notranslate",
+  const priceMatch =
 
-    '[class*="price"]',
+    allText.match(/₱\s?([\d,]+\.\d{2})/) ||
 
-    '[class*="Price"]'
-  ];
+    allText.match(/₱\s?([\d,]+)/);
 
-  for (const selector of priceSelectors) {
+  if (priceMatch) {
 
-    const elements =
-      document.querySelectorAll(selector);
+    price = priceMatch[1];
 
-    for (const el of elements) {
+  }
 
-      const text =
-        el.textContent?.trim() || "";
+  // =========================
+
+  // RATING
+
+  // =========================
+
+  let rating = 0;
+
+  const ratingMatch =
+
+    allText.match(/(\d\.\d)\s*\(\d+/);
+
+  if (ratingMatch) {
+
+    rating =
+
+      parseFloat(
+
+        ratingMatch[1]
+
+      ) || 0;
+
+  }
+
+  // =========================
+
+// REVIEWS
+
+// =========================
+
+let reviews = 0;
+
+// Try text-based patterns first
+
+const reviewPatterns = [
+
+  /([\d,.]+)\s*Ratings/i,
+
+  /([\d,.]+)\s*reviews/i,
+
+  /\(([\d,.]+)\)/,
+
+  /([\d,.]+)\s*rating/i
+
+];
+
+for (const pattern of reviewPatterns) {
+
+  const match =
+
+    allText.match(pattern);
+
+  if (match) {
+
+    let value =
+
+      match[1]
+
+        .toLowerCase()
+
+        .replace(/,/g, "");
+
+    // handle 1.2k format
+
+    if (value.includes("k")) {
+
+      reviews =
+
+        Math.round(
+
+          parseFloat(value) * 1000
+
+        );
+
+    } else {
+
+      reviews =
+
+        parseInt(value) || 0;
+
+    }
+
+    if (reviews > 0) {
+
+      break;
+
+    }
+
+  }
+
+}
+
+// fallback: scan spans/divs
+
+if (reviews === 0) {
+
+  const elements =
+
+    [...document.querySelectorAll("span, div")];
+
+  for (const el of elements) {
+
+    const text =
+
+      el.textContent?.trim() || "";
+
+    if (
+
+      text.toLowerCase().includes("ratings")
+
+    ) {
 
       const match =
-        text.match(/₱\s?(\d+[.,]?\d*)/);
+
+        text.match(/([\d,.kK]+)/);
 
       if (match) {
 
-        const value =
-          parseFloat(
-            match[1]
-              .replace(/,/g, "")
-          );
+        let value =
 
-        // IGNORE HUGE PRICES
-        if (
-          value > 0 &&
-          value < 5000
-        ) {
+          match[1]
 
-          price =
-            `₱${value.toFixed(2)}`;
+            .toLowerCase()
 
-          break;
+            .replace(/,/g, "");
+
+        if (value.includes("k")) {
+
+          reviews =
+
+            Math.round(
+
+              parseFloat(value) * 1000
+
+            );
+
+        } else {
+
+          reviews =
+
+            parseInt(value) || 0;
+
         }
+
+        break;
+
       }
+
     }
 
-    if (price) break;
   }
 
-  // ================================
-  // RATING
-  // ================================
+}
 
-  let rating = "";
+  // =========================
 
-  const allElements =
-    document.querySelectorAll("span, div");
-
-  allElements.forEach(el => {
-
-    const text =
-      el.textContent?.trim() || "";
-
-    if (
-      /^\d\.\d$/.test(text)
-    ) {
-
-      const num =
-        parseFloat(text);
-
-      if (
-        num >= 1 &&
-        num <= 5
-      ) {
-
-        if (!rating) {
-          rating = text;
-        }
-      }
-    }
-  });
-
-  // ================================
   // SELLER
-  // ================================
+
+  // =========================
 
   let seller = "";
 
-  const sellerElements =
-    document.querySelectorAll("a, span, div");
+  const sellerSelectors = [
 
-  sellerElements.forEach(el => {
+    '[data-spm="seller"] a',
 
-    const text =
-      el.textContent?.trim() || "";
+    '.seller-name a',
 
-    const blocked = [
+    '.pdp-seller-name a',
 
-      "GO TO STORE",
+    '.seller-link',
 
-      "SELL ON LAZADA",
+    'a[href*="shop"]'
 
-      "MEN'S SPORTS CLOTHING",
+  ];
 
-      "CHAT NOW",
+  for (const selector of sellerSelectors) {
 
-      "FOLLOW"
-    ];
+    const elements =
 
-    if (
-      blocked.includes(
-        text.toUpperCase()
-      )
-    ) {
-      return;
+      [...document.querySelectorAll(selector)];
+
+    const valid =
+
+      elements.find(el => {
+
+        const text =
+
+          el.textContent?.trim() || "";
+
+        const lower =
+
+          text.toLowerCase();
+
+        return (
+
+          text.length > 2 &&
+
+          text.length < 60 &&
+
+          !lower.includes("heating") &&
+
+          !lower.includes("cooling") &&
+
+          !lower.includes("ventilation") &&
+
+          !lower.includes("home appliances") &&
+
+          !lower.includes("categories") &&
+
+          !lower.includes("customer care") &&
+
+          !lower.includes("track my order") &&
+
+          !lower.includes("feedback") &&
+
+          !lower.includes("ratings") &&
+
+          !lower.includes("reviews") &&
+
+          !lower.includes("lazada")
+
+        );
+
+      });
+
+    if (valid) {
+
+      seller = valid.textContent
+
+  .trim()
+
+  .toLowerCase()
+
+  .replace(/\u200B/g, "")
+
+  .replace(/\s+/g, "");
+
+      break;
+
     }
 
-    if (
-      text.length > 2 &&
-      text.length < 25
-    ) {
-
-      const parent =
-        el.parentElement?.innerText || "";
-
-      if (
-        parent.includes("Seller") ||
-
-        parent.includes("sold by") ||
-
-        parent.includes("Visit Store")
-      ) {
-
-        if (!seller) {
-          seller = text;
-        }
-      }
-    }
-  });
-
-  // IMAGE
-  const image =
-    document.querySelector(
-      ".gallery-preview-panel__image img"
-    )?.src ||
-
-    document.querySelector("img")?.src ||
-
-    "";
-
-  // REVIEWS
-  let reviews = 0;
-
-  const reviewMatch =
-    document.body.innerText.match(
-      /(\d+[,\d]*)\s*Ratings/i
-    );
-
-  if (reviewMatch) {
-
-    reviews =
-      parseInt(
-        reviewMatch[1]
-          .replace(/,/g, "")
-      ) || 0;
   }
 
+  if (!seller) {
+
+  seller = "unknownseller";
+
+}
+
+  // =========================
+
+  // IMAGE
+
+  // =========================
+
+  let image = "";
+
+  const img =
+
+    document.querySelector("img.pdp-mod-common-image") ||
+
+    document.querySelector(".gallery-preview-panel__content img") ||
+
+    document.querySelector("img");
+
+  if (img) {
+
+    image =
+
+      img.src ||
+
+      img.getAttribute("src") ||
+
+      "";
+
+  }
+
+  // =========================
+
+  // LAZMALL CHECK
+
+  // =========================
+
+  const isLazMall =
+
+    document.body.innerText
+
+      .toLowerCase()
+
+      .includes("lazmall");
+
+  // =========================
+
+  // STATUS
+
+  // =========================
+
+  let status = "verified";
+
+  if (isLazMall) {
+
+    status = "verified";
+
+  } else if (
+
+    rating > 0 &&
+
+    rating < 2.5 &&
+
+    reviews < 3
+
+  ) {
+
+    status = "bogus";
+
+  }
+
+const normalizedSeller = seller
+
+  .trim()
+
+  .toLowerCase()
+
+  .replace(/\u200B/g, "")
+
+  .replace(/\s+/g, "");
+
+const sellerStatus = await checkSellerStatus(normalizedSeller);
+
+console.log("Lazada seller:", normalizedSeller);
+
+console.log("Seller status from API:", sellerStatus);
+
+  // =========================
+
   // RETURN
+
+  // =========================
+
   return {
 
-    name,
+  name,
 
-    price: Number(
-      cleanPrice(price).toFixed(2)
-    ),
+  price: Number(cleanPrice(price).toFixed(2)),
 
-    originalPrice: Number(
-      cleanPrice(price).toFixed(2)
-    ),
+  originalPrice: Number(cleanPrice(price).toFixed(2)),
 
-    image,
+  image,
 
-    category: "Unknown",
+  category: "Unknown",
 
-    platform: "Lazada",
+  platform: "Lazada",
 
-    rating: cleanRating(rating),
+  rating,
 
-    reviews,
+  reviews: reviews || 0,
 
-    status: "verified",
+  status,
 
-    inStock: true,
+  inStock: true,
 
-    url: location.href,
+  url: location.href,
 
-    sellerName:
-      seller || "Unknown Seller",
+  sellerName: normalizedSeller,
 
-    sellerId:
-      (seller || "unknown")
-        .toLowerCase()
-        .replace(/\s/g, "_")
-  };
+  sellerId: normalizedSeller.replace(/\s/g, "_"),
+
+  sellerStatus
+
+};
+
 }
 
 // ================================
+
 // MAIN SCANNER
+
 // ================================
 
-function scanProduct() {
+async function scanProduct() {
 
   const platform =
+
     getPlatform();
 
   let product = null;
 
   if (platform === "Shopee") {
 
-    product =
-      getShopeeProduct();
+    product = await getShopeeProduct();
+
   }
 
   if (platform === "Lazada") {
 
-    product =
-      getLazadaProduct();
+    product = await getLazadaProduct();
+
   }
 
-  if (!product) {
-
-    console.error(
-      "Unsupported platform"
-    );
-
-    return null;
-  }
-
-  // ================================
-  // BOGUS DETECTION
-  // ================================
-
-  if (
-    product.rating > 0 &&
-    product.rating < 2.5
-  ) {
-
-    product.status =
-      "bogus";
-  }
-
-  if (
-    product.reviews > 0 &&
-    product.reviews < 5
-  ) {
-
-    product.status =
-      "bogus";
-  }
-
-  const suspiciousWords = [
-
-    "flashsale",
-
-    "quickdeal",
-
-    "cheapshop",
-
-    "freeshipping",
-
-    "limiteddeal",
-
-    "supercheap"
-  ];
-
-  if (product.sellerName) {
-
-    const seller =
-      product.sellerName
-        .toLowerCase();
-
-    const suspicious =
-      suspiciousWords.some(
-        word =>
-          seller.includes(word)
-      );
-
-    if (suspicious) {
-
-      product.status =
-        "bogus";
-    }
-  }
-
-  return product;
+ if (!product) {
+  console.error("Unsupported platform");
+  return null;
 }
 
-// ================================
-// SAVE TO DATABASE
-// ================================
-
-async function saveProduct(product) {
-
-  try {
-
-    const response =
-      await fetch(
-        "http://localhost:5000/api/products",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body: JSON.stringify(product)
-        }
-      );
-
-    const result =
-      await response.json();
-
-    console.log(
-      "Saved:",
-      result
-    );
-
-    return result;
-
-  } catch (err) {
-
-    console.error(
-      "Save failed:",
-      err
-    );
-
-    return null;
-  }
+if (product.sellerStatus === "blocked") {
+  product.status = "blocked";
 }
-
-// ================================
-// SHOW POPUP
-// ================================
-
-function showPopup(product) {
-
-  const existing =
-    document.getElementById(
-      "shopguard-popup"
-    );
-
-  if (existing) {
-    existing.remove();
-  }
-
-  const popup =
-    document.createElement("div");
-
-  popup.id =
-    "shopguard-popup";
-
-  popup.style.position =
-    "fixed";
-
-  popup.style.top =
-    "20px";
-
-  popup.style.right =
-    "20px";
-
-  popup.style.width =
-    "320px";
-
-  popup.style.background =
-    "#0f172a";
-
-  popup.style.color =
-    "white";
-
-  popup.style.padding =
-    "16px";
-
-  popup.style.borderRadius =
-    "12px";
-
-  popup.style.boxShadow =
-    "0 0 20px rgba(0,0,0,0.4)";
-
-  popup.style.zIndex =
-    "999999";
-
-  popup.style.fontFamily =
-    "Arial";
-
-  popup.style.border =
-    "1px solid #334155";
-
-  popup.innerHTML = `
-
-    <h2 style="
-      margin:0 0 10px 0;
-      color:#06b6d4;
-    ">
-      ShopGuard Scan
-    </h2>
-
-    <img
-      src="${product.image}"
-      style="
-        width:100%;
-        height:180px;
-        object-fit:cover;
-        border-radius:8px;
-        margin-bottom:12px;
-      "
-    />
-
-    <p>
-      <strong>Name:</strong>
-      ${product.name}
-    </p>
-
-    <p>
-      <strong>Price:</strong>
-      ₱${product.price.toFixed(2)}
-    </p>
-
-    <p>
-      <strong>Seller:</strong>
-      ${product.sellerName}
-    </p>
-
-    <p>
-      <strong>Rating:</strong>
-      ${product.rating}
-    </p>
-
-    <p>
-      <strong>Reviews:</strong>
-      ${product.reviews}
-    </p>
-
-    <p>
-      <strong>Platform:</strong>
-      ${product.platform}
-    </p>
-
-    <p>
-      <strong>Status:</strong>
-
-      <span style="
-        color:${
-          product.status === "bogus"
-            ? "#ef4444"
-            : "#22c55e"
-        };
-        font-weight:bold;
-      ">
-        ${product.status.toUpperCase()}
-      </span>
-    </p>
-
-    <button
-      id="shopguard-save-btn"
-      style="
-        width:100%;
-        margin-top:12px;
-        padding:10px;
-        border:none;
-        border-radius:8px;
-        background:#06b6d4;
-        color:white;
-        cursor:pointer;
-      "
-    >
-      Save Product
-    </button>
-
-    <button
-      id="shopguard-close-btn"
-      style="
-        width:100%;
-        margin-top:8px;
-        padding:10px;
-        border:none;
-        border-radius:8px;
-        background:#334155;
-        color:white;
-        cursor:pointer;
-      "
-    >
-      Close
-    </button>
-  `;
-
-  document.body.appendChild(
-    popup
-  );
-
-  // CLOSE
-  document
-    .getElementById(
-      "shopguard-close-btn"
-    )
-    .addEventListener(
-      "click",
-      () => {
-
-        popup.remove();
-      }
-    );
-
-  // SAVE
-  document
-    .getElementById(
-      "shopguard-save-btn"
-    )
-    .addEventListener(
-      "click",
-      async () => {
-
-        const result =
-          await saveProduct(
-            product
-          );
-
-        if (result) {
-
-          alert(
-            "Product saved to ShopGuard"
-          );
-
-        } else {
-
-          alert(
-            "Save failed"
-          );
-        }
-      }
-    );
+return product;
 }
 
 // ================================
@@ -771,92 +857,58 @@ function showPopup(product) {
 // ================================
 
 chrome.runtime.onMessage.addListener(
-  (
-    message,
-    sender,
-    sendResponse
-  ) => {
+  (message, sender, sendResponse) => {
 
-    if (
-      message.action ===
-      "SCAN_PRODUCT"
-    ) {
+    if (message.action === "SCAN_PRODUCT") {
 
-      try {
-
-        const product =
-          scanProduct();
-
-        console.log(
-          "SCANNED PRODUCT:",
-          product
-        );
-
-        if (product) {
-
-          showPopup(product);
-
+      scanProduct()
+        .then(product => {
+          if (product) {
+            sendResponse({
+              success: true,
+              product
+            });
+          } else {
+            sendResponse({
+              success: false
+            });
+          }
+        })
+        .catch(err => {
           sendResponse({
-
-            success: true,
-
-            product
+            success: false,
+            error: err.message
           });
-
-        } else {
-
-          sendResponse({
-
-            success: false
-          });
-        }
-
-      } catch (err) {
-
-        console.error(err);
-
-        sendResponse({
-
-          success: false,
-
-          error: err.message
         });
-      }
+
+      return true;
     }
 
-    return true;
   }
 );
 
 // ================================
+
 // PAGE DETECTOR
+
 // ================================
 
 function isProductPage() {
 
   return (
 
-    location.href.includes(
-      "/product/"
-    ) ||
+    location.href.includes("/product/") ||
 
-    location.href.includes(
-      "-i."
-    ) ||
+    location.href.includes("-i.") ||
 
-    location.href.includes(
-      "/products/"
-    )
+    location.href.includes("/products/")
+
   );
-}
 
-// ================================
-// AUTO LOG
-// ================================
+}
 
 if (isProductPage()) {
 
-  console.log(
-    "ShopGuard detected product page"
-  );
+  console.log("ShopGuard detected product page");
+
 }
