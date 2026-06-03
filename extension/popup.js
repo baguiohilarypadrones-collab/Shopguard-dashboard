@@ -94,14 +94,23 @@ function showProduct(product) {
         <strong>Status:</strong>
 
         <span style="
-          color:${product.status === "bogus"
-            ? "#ef4444"
-            : "#22c55e"};
+          color:${
+  product.status === "blocked"
+    ? "#ef4444"
+    : product.status === "bogus"
+      ? "#f59e0b"
+      : "#22c55e"
+};
           font-weight:bold;
         ">
           ${product.status.toUpperCase()}
         </span>
       </p>
+      
+<p style="margin:8px 0;">
+ <strong>Seller Status:</strong>
+ ${product.sellerStatus || "unknown"}
+</p>
 
       <button
         id="saveBtn"
