@@ -10,9 +10,7 @@ console.log("ShopGuard popup loaded");
 // ================================
 
 const scanBtn = document.getElementById("scanBtn");
-
 const resultBox = document.getElementById("result");
-
 const statusText = document.getElementById("status");
 
 // ================================
@@ -20,10 +18,43 @@ const statusText = document.getElementById("status");
 // ================================
 
 function setStatus(text, color = "#06b6d4") {
-
   statusText.textContent = text;
-
   statusText.style.color = color;
+}
+
+// ================================
+// HELPERS
+// ================================
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getProductStatusColor(status) {
+  return status === "blocked"
+    ? "#ef4444"
+    : status === "bogus"
+      ? "#f59e0b"
+      : "#22c55e";
+}
+
+function getSellerStatusColor(status) {
+  return status === "blocked"
+    ? "#ef4444"
+    : status === "verified"
+      ? "#22c55e"
+      : status === "flagged" || status === "bogus"
+        ? "#f59e0b"
+        : "#94a3b8";
+}
+
+function formatStatus(status) {
+  return String(status || "unknown").toUpperCase();
 }
 
 // ================================
@@ -31,9 +62,17 @@ function setStatus(text, color = "#06b6d4") {
 // ================================
 
 function showProduct(product) {
+  const productStatus = product.status || "unknown";
+  const sellerStatus = product.sellerStatus || "unknown";
+
+  const productStatusColor = getProductStatusColor(productStatus);
+  const sellerStatusColor = getSellerStatusColor(sellerStatus);
+
+  const isBlocked =
+    productStatus === "blocked" ||
+    sellerStatus === "blocked";
 
   resultBox.innerHTML = `
-  
     <div style="
       margin-top:12px;
       padding:12px;
@@ -42,102 +81,142 @@ function showProduct(product) {
       color:white;
     ">
 
-      <img
-        src="${product.image}"
-        style="
-          width:100%;
-          height:180px;
-          object-fit:cover;
-          border-radius:8px;
-          margin-bottom:10px;
-        "
-      />
+      ${
+        product.image
+          ? `
+            <img
+              src="${escapeHtml(product.image)}"
+              style="
+                width:100%;
+                height:180px;
+                object-fit:cover;
+                border-radius:8px;
+                margin-bottom:10px;
+              "
+            />
+          `
+          : `
+            <div style="
+              width:100%;
+              height:120px;
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              background:#0f172a;
+              border-radius:8px;
+              margin-bottom:10px;
+              color:#94a3b8;
+              font-size:13px;
+            ">
+              No image found
+            </div>
+          `
+      }
 
       <h3 style="
         margin:0;
         font-size:16px;
+        line-height:1.4;
       ">
-        ${product.name}
+        ${escapeHtml(product.name || "Unknown Product")}
       </h3>
 
       <p style="
         margin:8px 0;
         color:#94a3b8;
       ">
-        ${product.platform}
+        ${escapeHtml(product.platform || "Unknown Platform")}
       </p>
 
-      <p style="
-        margin:8px 0;
-      ">
+      <p style="margin:8px 0;">
         <strong>Price:</strong>
-        ₱${Number(product.price).toFixed(2)}
+        ₱${Number(product.price || 0).toFixed(2)}
       </p>
 
-      <p style="
-        margin:8px 0;
-      ">
+      <p style="margin:8px 0;">
         <strong>Seller:</strong>
-        ${product.sellerName}
+        ${escapeHtml(product.sellerName || "Unknown Seller")}
       </p>
 
-      <p style="
-        margin:8px 0;
-      ">
-        <strong>Rating:</strong>
-        ${product.rating}
-      </p>
-
-      <p style="
-        margin:8px 0;
-      ">
-        <strong>Status:</strong>
-
+      <p style="margin:8px 0;">
+        <strong>Seller Status:</strong>
         <span style="
-          color:${
-  product.status === "blocked"
-    ? "#ef4444"
-    : product.status === "bogus"
-      ? "#f59e0b"
-      : "#22c55e"
-};
+          color:${sellerStatusColor};
           font-weight:bold;
         ">
-          ${product.status.toUpperCase()}
+          ${formatStatus(sellerStatus)}
         </span>
       </p>
-      
-<p style="margin:8px 0;">
- <strong>Seller Status:</strong>
- ${product.sellerStatus || "unknown"}
-</p>
+
+      <p style="margin:8px 0;">
+        <strong>Rating:</strong>
+        ${product.rating ?? 0}
+      </p>
+
+      <p style="margin:8px 0;">
+        <strong>Reviews:</strong>
+        ${product.reviews || 0}
+      </p>
+
+      <p style="margin:8px 0;">
+        <strong>Status:</strong>
+        <span style="
+          color:${productStatusColor};
+          font-weight:bold;
+        ">
+          ${formatStatus(productStatus)}
+        </span>
+      </p>
+
+      ${
+        isBlocked
+          ? `
+            <div style="
+              margin-top:12px;
+              padding:10px;
+              border-radius:8px;
+              background:rgba(239,68,68,0.15);
+              border:1px solid rgba(239,68,68,0.4);
+              color:#fca5a5;
+              font-size:13px;
+              line-height:1.4;
+            ">
+              ⚠️ Warning: This seller is blocked in the ShopGuard database.
+              This product has been automatically flagged.
+            </div>
+          `
+          : ""
+      }
 
       <button
         id="saveBtn"
+        ${isBlocked ? "disabled" : ""}
         style="
           width:100%;
           padding:10px;
           border:none;
           border-radius:8px;
-          background:#06b6d4;
+          background:${isBlocked ? "#475569" : "#06b6d4"};
           color:white;
-          cursor:pointer;
-          margin-top:10px;
+          cursor:${isBlocked ? "not-allowed" : "pointer"};
+          margin-top:12px;
+          font-weight:bold;
         "
       >
-        Save Product
+        ${isBlocked ? "Blocked Seller - Cannot Save" : "Save Product"}
       </button>
 
     </div>
   `;
 
   // SAVE BUTTON
-  document
-    .getElementById("saveBtn")
-    .addEventListener("click", () => {
+  const saveBtn = document.getElementById("saveBtn");
 
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
       saveProduct(product);
     });
+  }
 }
 
 // ================================
@@ -145,8 +224,21 @@ function showProduct(product) {
 // ================================
 
 async function saveProduct(product) {
-
   try {
+    // Optional safety:
+    // Product model currently supports verified/bogus/pending only.
+    // So blocked products are stopped here.
+    if (
+      product.status === "blocked" ||
+      product.sellerStatus === "blocked"
+    ) {
+      setStatus(
+        "Blocked seller detected — product not saved",
+        "#ef4444"
+      );
+
+      return;
+    }
 
     setStatus("Saving product...", "#facc15");
 
@@ -168,14 +260,11 @@ async function saveProduct(product) {
     console.log(result);
 
     if (response.ok) {
-
       setStatus(
         "Product saved successfully",
         "#22c55e"
       );
-
     } else {
-
       setStatus(
         result.error || "Save failed",
         "#ef4444"
@@ -183,7 +272,6 @@ async function saveProduct(product) {
     }
 
   } catch (err) {
-
     console.error(err);
 
     setStatus(
@@ -198,10 +286,11 @@ async function saveProduct(product) {
 // ================================
 
 scanBtn.addEventListener("click", async () => {
-
   try {
-
     setStatus("Scanning product...", "#facc15");
+
+    scanBtn.disabled = true;
+    scanBtn.textContent = "Scanning...";
 
     // GET ACTIVE TAB
     const [tab] = await chrome.tabs.query({
@@ -209,12 +298,14 @@ scanBtn.addEventListener("click", async () => {
       currentWindow: true
     });
 
-    if (!tab.id) {
-
+    if (!tab || typeof tab.id !== "number") {
       setStatus(
         "No active tab found",
         "#ef4444"
       );
+
+      scanBtn.disabled = false;
+      scanBtn.textContent = "Scan Current Product";
 
       return;
     }
@@ -226,10 +317,11 @@ scanBtn.addEventListener("click", async () => {
         action: "SCAN_PRODUCT"
       },
       (response) => {
+        scanBtn.disabled = false;
+        scanBtn.textContent = "Scan Current Product";
 
         // ERROR CHECK
         if (chrome.runtime.lastError) {
-
           console.error(
             chrome.runtime.lastError
           );
@@ -244,7 +336,6 @@ scanBtn.addEventListener("click", async () => {
 
         // NO RESPONSE
         if (!response) {
-
           setStatus(
             "No response from page",
             "#ef4444"
@@ -255,18 +346,32 @@ scanBtn.addEventListener("click", async () => {
 
         // SUCCESS
         if (response.success) {
+          const product = response.product;
 
-          setStatus(
-            "Scan complete",
-            "#22c55e"
+          const color = getProductStatusColor(
+            product.status
           );
 
-          showProduct(response.product);
+          if (
+            product.status === "blocked" ||
+            product.sellerStatus === "blocked"
+          ) {
+            setStatus(
+              "Blocked seller detected",
+              "#ef4444"
+            );
+          } else {
+            setStatus(
+              "Scan complete",
+              color
+            );
+          }
+
+          showProduct(product);
 
         } else {
-
           setStatus(
-            "Product scan failed",
+            response.error || "Product scan failed",
             "#ef4444"
           );
         }
@@ -274,8 +379,10 @@ scanBtn.addEventListener("click", async () => {
     );
 
   } catch (err) {
-
     console.error(err);
+
+    scanBtn.disabled = false;
+    scanBtn.textContent = "Scan Current Product";
 
     setStatus(
       "Unexpected error",
